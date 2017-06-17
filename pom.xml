@@ -23,10 +23,10 @@
           <url>https://hub.spigotmc.org/nexus/content/groups/public/</url>
         </repository>
 
-        <!-- Repo for access to Vault -->
+        <!-- Repo for access to BKCommonLib -->
         <repository>
-            <id>vault-repo</id>
-            <url>http://nexus.hc.to/content/repositories/pub_releases</url>
+            <id>MG-Dev Jenkins CI Maven Repository</id>
+            <url>https://ci.mg-dev.eu/plugin/repository/everything</url>
         </repository>
     </repositories>
 
