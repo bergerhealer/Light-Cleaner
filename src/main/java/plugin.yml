@@ -1,0 +1,16 @@
+name: ${project.name}
+main: com.bergerkiller.bukkit.lightcleaner.LightCleaner
+version: ${project.version}
+authors: [bergerkiller]
+depend: [BKCommonLib]
+description: Cleans up bugged lighting in chunks or entire worlds
+dev-url: ${project.url}
+commands:
+    cleanlight:
+        description: Cleans up bugged lighting in chunks or entire worlds
+        usage: |
+          /cleanlight
+          /cleanlight [chunk_radius]
+          /cleanlight world [world_name]
+          /cleanlight abort
+          /cleanlight status
