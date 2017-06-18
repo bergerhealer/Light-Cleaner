@@ -65,27 +65,12 @@ public class LightCleaner extends PluginBase {
     @Override
     public boolean command(CommandSender sender, String command, String[] args) {
         try {
-            if (args.length == 0) {
-                // cleanlight
-                Permission.CLEAN.handle(sender);
-                
-                if (sender instanceof Player) {
-                    Player p = (Player) sender;
-                    int radius = Bukkit.getServer().getViewDistance();
-                    if (args.length == 2) {
-                        radius = ParseUtil.parseInt(args[1], radius);
-                    }
-                    Location l = p.getLocation();
-                    LightingService.scheduleArea(p.getWorld(), l.getBlockX() >> 4, l.getBlockZ() >> 4, radius);
-                    p.sendMessage(ChatColor.GREEN + "A " + (radius * 2 + 1) + " X " + (radius * 2 + 1) + " chunk area around you is currently being fixed from lighting issues...");
-                    LightingService.addRecipient(sender);
-                } else {
-                    sender.sendMessage(ChatColor.RED + "This command is only available to players");
-                }
-            } else if (args[0].equalsIgnoreCase("world")) {
+            String subCmd = (args.length == 0) ? "" : args[0];
+            if (subCmd.equalsIgnoreCase("world")) {
                 // cleanlight world
+                Permission.CLEAN.handle(sender);
                 Permission.CLEAN_WORLD.handle(sender);
-                
+
                 final World world;
                 if (args.length >= 2) {
                     world = Bukkit.getWorld(args[1]);
@@ -114,8 +99,7 @@ public class LightCleaner extends PluginBase {
                 LightingService.addRecipient(sender);
                 // Get an iterator for all the chunks to fix
                 LightingService.scheduleWorld(world, regionFolder);
-                
-            } else if (args[0].equalsIgnoreCase("abort")) {
+            } else if (subCmd.equalsIgnoreCase("abort")) {
                 // cleanlight abort
                 Permission.ABORT.handle(sender);
                 if (LightingService.isProcessing()) {
@@ -124,7 +108,7 @@ public class LightCleaner extends PluginBase {
                 } else {
                     sender.sendMessage(ChatColor.YELLOW + "No lighting was being processed; there was nothing to abort.");
                 }
-            } else if (args[0].equalsIgnoreCase("status")) {
+            } else if (subCmd.equalsIgnoreCase("status")) {
                 // cleanlight status
                 Permission.STATUS.handle(sender);
                 if (LightingService.isProcessing()) {
@@ -133,10 +117,26 @@ public class LightCleaner extends PluginBase {
                 } else {
                     sender.sendMessage(ChatColor.GREEN + "No lighting is being processed at this time.");
                 }
+            } else if (args.length == 0 || ParseUtil.isNumeric(args[0])) {
+                // cleanlight
+                Permission.CLEAN.handle(sender);
+
+                if (sender instanceof Player) {
+                    Player p = (Player) sender;
+                    int radius = Bukkit.getServer().getViewDistance();
+                    if (args.length >= 1) {
+                        Permission.CLEAN_AREA.handle(sender);
+                        radius = ParseUtil.parseInt(args[0], radius);
+                    }
+                    Location l = p.getLocation();
+                    LightingService.scheduleArea(p.getWorld(), l.getBlockX() >> 4, l.getBlockZ() >> 4, radius);
+                    p.sendMessage(ChatColor.GREEN + "A " + (radius * 2 + 1) + " X " + (radius * 2 + 1) + " chunk area around you is currently being fixed from lighting issues...");
+                    LightingService.addRecipient(sender);
+                } else {
+                    sender.sendMessage("This command is only available to players");
+                }
             } else {
-                // cleanlight [radius]
-                Permission.CLEAN_AREA.handle(sender);
-                
+                return false; // unknown command
             }
         } catch (NoPermissionException ex) {
             if (sender instanceof Player) {
