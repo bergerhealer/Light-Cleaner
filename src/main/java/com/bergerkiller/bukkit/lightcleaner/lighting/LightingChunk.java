@@ -212,29 +212,30 @@ public class LightingChunk {
     /**
      * Spreads the light from sources to 'zero' light level blocks
      *
-     * @return True if spreading was needed, False if not
+     * @return Number of processing loops executed. 0 indicates no faults were found.
      */
-    public boolean spread() {
+    public int spread() {
         if (hasFaults()) {
+            int count = 0;
             if (isSkyLightDirty) {
-                spread(true);
+                count += spread(true);
             }
             if (isBlockLightDirty) {
-                spread(false);
+                count += spread(false);
             }
-            return true;
+            return count;
         } else {
-            return false;
+            return 0;
         }
     }
 
-    private void spread(boolean skyLight) {
+    private int spread(boolean skyLight) {
         if (skyLight && !hasSkyLight) {
             this.isSkyLightDirty = false;
-            return;
+            return 0;
         }
         int x, y, z, light, factor, startY, newlight;
-        int loops = 0;
+        int loops = -1;
         int lasterrx = 0, lasterry = 0, lasterrz = 0;
         final int maxY = getTopY();
         boolean haserror;
@@ -248,7 +249,7 @@ public class LightingChunk {
         // Keep spreading the light in this chunk until it is done
         do {
             haserror = false;
-            if (loops++ > 100) {
+            if (++loops > 100) {
                 lasterrx += this.chunkX << 4;
                 lasterrz += this.chunkZ << 4;
                 StringBuilder msg = new StringBuilder();
@@ -306,6 +307,8 @@ public class LightingChunk {
         if (err_neigh_px) markNeighbor(1, 0, skyLight);
         if (err_neigh_ny) markNeighbor(0, -1, skyLight);
         if (err_neigh_py) markNeighbor(0, 1, skyLight);
+
+        return loops;
     }
 
     private void markNeighbor(int dx, int dy, boolean skyLight) {

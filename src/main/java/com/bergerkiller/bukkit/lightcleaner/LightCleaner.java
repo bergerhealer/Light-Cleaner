@@ -21,6 +21,7 @@ import com.bergerkiller.reflection.net.minecraft.server.NMSRegionFileCache;
 public class LightCleaner extends PluginBase {
     public static LightCleaner plugin;
     public static long minFreeMemory = 100 * 1024 * 1024;
+    public static boolean autoCleanEnabled = false;
 
     @Override
     public int getMinimumLibVersion() {
@@ -49,6 +50,10 @@ public class LightCleaner extends PluginBase {
         config.addHeader("minFreeMemory", "If the remaining free memory drops below this value, measures are taken to reduce it");
         config.addHeader("minFreeMemory", "Memory will be Garbage Collected and all worlds will be saved to free memory");
         minFreeMemory = 1024 * 1024 * config.get("minFreeMemory", 100);
+
+        config.setHeader("autoCleanEnabled", "Sets whether lighting is cleaned up for newly generated chunks");
+        config.addHeader("autoCleanEnabled", "This will eliminate dark shadows during world generation");
+        autoCleanEnabled = config.get("autoCleanEnabled", false);
 
         config.save();
 

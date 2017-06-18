@@ -3,8 +3,10 @@ package com.bergerkiller.bukkit.lightcleaner;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.world.ChunkPopulateEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 
+import com.bergerkiller.bukkit.lightcleaner.lighting.LightingAutoClean;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
 
 public class NLLListener implements Listener {
@@ -14,5 +16,10 @@ public class NLLListener implements Listener {
         if (LightingService.isProcessing(event.getChunk())) {
             event.setCancelled(true);
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onChunkGenerate(ChunkPopulateEvent event) {
+        LightingAutoClean.handleChunkGenerated(event.getWorld(), event.getChunk().getX(), event.getChunk().getZ());
     }
 }

@@ -7,6 +7,7 @@ import org.bukkit.Chunk;
 import org.bukkit.World;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -22,7 +23,7 @@ public class LightingTaskBatch implements LightingTask {
     private final Object waitObject = new Object();
     private Runnable activeTask = null;
 
-    public LightingTaskBatch(World world, List<IntVector2> chunkCoordinates) {
+    public LightingTaskBatch(World world, Collection<IntVector2> chunkCoordinates) {
         // Initialization
         this.world = world;
         this.chunks = new ArrayList<LightingChunk>(chunkCoordinates.size());
@@ -183,12 +184,17 @@ public class LightingTaskBatch implements LightingTask {
         }
         // Spread
         boolean hasFaults;
+        int totalLoops = 0;
         do {
             hasFaults = false;
             for (LightingChunk chunk : chunks) {
-                hasFaults |= chunk.spread();
+                int count = chunk.spread();
+                totalLoops += count;
+                hasFaults |= count > 0;
             }
         } while (hasFaults);
         this.completed();
+        
+        System.out.println("Done! We looped " + totalLoops + " times");
     }
 }

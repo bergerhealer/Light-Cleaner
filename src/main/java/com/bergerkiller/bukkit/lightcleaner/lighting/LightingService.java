@@ -105,7 +105,7 @@ public class LightingService extends AsyncTask {
         schedule(world, chunks);
     }
 
-    public static void schedule(World world, List<IntVector2> chunks) {
+    public static void schedule(World world, Collection<IntVector2> chunks) {
         schedule(new LightingTaskBatch(world, chunks));
     }
 
