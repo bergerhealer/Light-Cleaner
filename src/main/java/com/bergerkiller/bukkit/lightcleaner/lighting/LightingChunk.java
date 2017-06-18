@@ -1,5 +1,6 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
+import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.bases.NibbleArrayBase;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
@@ -32,10 +33,8 @@ public class LightingChunk {
     public boolean isBlockLightDirty = true;
     public boolean isFilled = false;
     public boolean isApplied = false;
-    public int startX = 1;
-    public int startZ = 1;
-    public int endX = 14;
-    public int endZ = 14;
+    public IntVector2 start = new IntVector2(1, 1);
+    public IntVector2 end = new IntVector2(14, 14);
 
     public LightingChunk(int x, int z) {
         this.chunkX = x;
@@ -58,13 +57,13 @@ public class LightingChunk {
         neighbors.set(dx, dz, chunk);
         // Update start/end coordinates
         if (dx == 1) {
-            endX = 15;
+            end = new IntVector2(15, end.z);
         } else if (dx == -1) {
-            startX = 0;
+            start = new IntVector2(0, start.z);
         } else if (dz == 1) {
-            endZ = 15;
+            end = new IntVector2(end.x, 15);
         } else if (dz == -1) {
-            startZ = 0;
+            start = new IntVector2(start.x, 0);
         }
     }
 
@@ -117,8 +116,8 @@ public class LightingChunk {
         int x, y, z, light, darkLight, height, opacity;
         LightingChunkSection section;
         // Apply initial sky lighting from top to bottom
-        for (x = startX; x <= endX; x++) {
-            for (z = startZ; z <= endZ; z++) {
+        for (x = start.x; x <= end.x; x++) {
+            for (z = start.z; z <= end.z; z++) {
                 light = 15;
                 darkLight = topY;
                 height = 0;
@@ -146,24 +145,21 @@ public class LightingChunk {
     }
 
 
-    private final int getMaxLightLevel(boolean skyLight, int lightLevel, int x, int y, int z) {
+    private final int getMaxLightLevel(LightingChunkSection section, boolean skyLight, int lightLevel, int x, int y, int z) {
         if (x >= 1 && z >= 1 && x <= 14 && z <= 14) {
             // All within this chunk - simplified calculation
-            final LightingChunkSection section = this.sections[y >> 4];
-            if (section != null) {
-                final int dy = y & 0xf;
-                final NibbleArrayBase light = skyLight ? section.skyLight : section.blockLight;
-                lightLevel = Math.max(lightLevel, light.get(x - 1, dy, z));
-                lightLevel = Math.max(lightLevel, light.get(x + 1, dy, z));
-                lightLevel = Math.max(lightLevel, light.get(x, dy, z - 1));
-                lightLevel = Math.max(lightLevel, light.get(x, dy, z + 1));
+            final int dy = y & 0xf;
+            final NibbleArrayBase light = skyLight ? section.skyLight : section.blockLight;
+            lightLevel = Math.max(lightLevel, light.get(x - 1, dy, z));
+            lightLevel = Math.max(lightLevel, light.get(x + 1, dy, z));
+            lightLevel = Math.max(lightLevel, light.get(x, dy, z - 1));
+            lightLevel = Math.max(lightLevel, light.get(x, dy, z + 1));
 
-                // If dy is also within this section, we can simplify it
-                if (dy >= 1 && dy <= 14) {
-                    lightLevel = Math.max(lightLevel, light.get(x, dy - 1, z));
-                    lightLevel = Math.max(lightLevel, light.get(x, dy + 1, z));
-                    return lightLevel;
-                }
+            // If dy is also within this section, we can simplify it
+            if (dy >= 1 && dy <= 14) {
+                lightLevel = Math.max(lightLevel, light.get(x, dy - 1, z));
+                lightLevel = Math.max(lightLevel, light.get(x, dy + 1, z));
+                return lightLevel;
             }
         } else {
             // Crossing chunk boundaries - requires neighbor checks
@@ -247,6 +243,9 @@ public class LightingChunk {
 
         LightingChunkSection chunksection;
         // Keep spreading the light in this chunk until it is done
+        boolean mode = false;
+        IntVector2 loop_start, loop_end;
+        int loop_increment;
         do {
             haserror = false;
             if (++loops > 100) {
@@ -259,9 +258,23 @@ public class LightingChunk {
                 LightCleaner.plugin.log(Level.WARNING, msg.toString());
                 break;
             }
+
+            // Alternate iterating positive and negative
+            // This allows proper optimized spreading in all directions
+            mode = !mode;
+            if (mode) {
+                loop_start = start;
+                loop_end = end;
+                loop_increment = 1;
+            } else {
+                loop_start = end;
+                loop_end = start;
+                loop_increment = -1;
+            }
+
             // Go through all blocks, using the heightmap for sky light to skip a few
-            for (x = startX; x <= endX; x++) {
-                for (z = startZ; z <= endZ; z++) {
+            for (x = loop_start.x; x <= loop_end.x; x += loop_increment) {
+                for (z = loop_start.z; z <= loop_end.z; z += loop_increment) {
                     startY = skyLight ? getHeight(x, z) : maxY;
                     for (y = startY; y > 0; y--) {
                         if ((chunksection = this.sections[y >> 4]) == null) {
@@ -276,7 +289,9 @@ public class LightingChunk {
                         // Read the old light level and try to find a light level around it that exceeds
                         light = chunksection.getLight(skyLight, x, y & 0xf, z);
                         newlight = light + factor;
-                        newlight = getMaxLightLevel(skyLight, newlight, x, y, z);
+                        if (newlight < 15) {
+                            newlight = getMaxLightLevel(chunksection, skyLight, newlight, x, y, z);
+                        }
                         newlight -= factor;
 
                         // pick the highest value

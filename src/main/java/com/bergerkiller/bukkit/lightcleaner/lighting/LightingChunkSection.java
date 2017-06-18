@@ -31,7 +31,7 @@ public class LightingChunkSection {
         BlockData info;
         for (x = 0; x < 16; x++) {
             for (z = 0; z < 16; z++) {
-                withinBounds = x >= owner.startX && x <= owner.endX && z >= owner.startZ && z <= owner.endZ;
+                withinBounds = x >= owner.start.x && x <= owner.end.x && z >= owner.start.z && z <= owner.end.z;
                 for (y = 0; y < 16; y++) {
                     info = chunkSection.getBlockData(x, y, z);
                     opacity = info.getOpacity() & 0xf;

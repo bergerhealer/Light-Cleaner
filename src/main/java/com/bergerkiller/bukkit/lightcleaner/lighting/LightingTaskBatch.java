@@ -17,6 +17,7 @@ import java.util.List;
  */
 public class LightingTaskBatch implements LightingTask {
     public static final int MAX_PROCESSING_TICK_TIME = 30; // max ms per tick processing
+    private static boolean DEBUG_LOG = false; // logs performance stats
     public final World world;
     private final List<LightingChunk> chunks;
     private final LongHashSet chunksCoords = new LongHashSet();
@@ -182,8 +183,10 @@ public class LightingTaskBatch implements LightingTask {
         for (LightingChunk chunk : chunks) {
             chunk.initLight();
         }
-        // Spread
+
+        // Spread (timed, for debug)
         boolean hasFaults;
+        long startTime = System.currentTimeMillis();
         int totalLoops = 0;
         do {
             hasFaults = false;
@@ -194,7 +197,10 @@ public class LightingTaskBatch implements LightingTask {
             }
         } while (hasFaults);
         this.completed();
-        
-        System.out.println("Done! We looped " + totalLoops + " times");
+
+        long duration = System.currentTimeMillis() - startTime;
+        if (DEBUG_LOG) {
+            System.out.println("Processed " + totalLoops + " in " + duration + " ms");
+        }
     }
 }
