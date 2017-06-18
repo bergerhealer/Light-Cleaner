@@ -264,17 +264,17 @@ public class LightingChunk {
             mode = !mode;
             if (mode) {
                 loop_start = start;
-                loop_end = end;
+                loop_end = end.add(1, 1);
                 loop_increment = 1;
             } else {
                 loop_start = end;
-                loop_end = start;
+                loop_end = start.subtract(1, 1);
                 loop_increment = -1;
             }
 
             // Go through all blocks, using the heightmap for sky light to skip a few
-            for (x = loop_start.x; x <= loop_end.x; x += loop_increment) {
-                for (z = loop_start.z; z <= loop_end.z; z += loop_increment) {
+            for (x = loop_start.x; x != loop_end.x; x += loop_increment) {
+                for (z = loop_start.z; z != loop_end.z; z += loop_increment) {
                     startY = skyLight ? getHeight(x, z) : maxY;
                     for (y = startY; y > 0; y--) {
                         if ((chunksection = this.sections[y >> 4]) == null) {
