@@ -1,5 +1,6 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
+import com.bergerkiller.bukkit.common.bases.NibbleArrayBase;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
@@ -144,16 +145,60 @@ public class LightingChunk {
         }
     }
 
-    private int getLightLevel(boolean skyLight, int x, int y, int z) {
-        // In range?
-        if ((y & OC) != 0) {
-            return 0;
+
+    private final int getMaxLightLevel(boolean skyLight, int lightLevel, int x, int y, int z) {
+        if (x >= 1 && z >= 1 && x <= 14 && z <= 14) {
+            // All within this chunk - simplified calculation
+            final LightingChunkSection section = this.sections[y >> 4];
+            if (section != null) {
+                final int dy = y & 0xf;
+                final NibbleArrayBase light = skyLight ? section.skyLight : section.blockLight;
+                lightLevel = Math.max(lightLevel, light.get(x - 1, dy, z));
+                lightLevel = Math.max(lightLevel, light.get(x + 1, dy, z));
+                lightLevel = Math.max(lightLevel, light.get(x, dy, z - 1));
+                lightLevel = Math.max(lightLevel, light.get(x, dy, z + 1));
+
+                // If dy is also within this section, we can simplify it
+                if (dy >= 1 && dy <= 14) {
+                    lightLevel = Math.max(lightLevel, light.get(x, dy - 1, z));
+                    lightLevel = Math.max(lightLevel, light.get(x, dy + 1, z));
+                    return lightLevel;
+                }
+            }
+        } else {
+            // Crossing chunk boundaries - requires neighbor checks
+            lightLevel = Math.max(lightLevel, getLightLevel(skyLight, x - 1, y, z));
+            lightLevel = Math.max(lightLevel, getLightLevel(skyLight, x + 1, y, z));
+            lightLevel = Math.max(lightLevel, getLightLevel(skyLight, x, y, z - 1));
+            lightLevel = Math.max(lightLevel, getLightLevel(skyLight, x, y, z + 1));
         }
+
+        // Slice below
+        if (y >= 1) {
+            final LightingChunkSection sectionBelow = this.sections[(y - 1) >> 4];
+            if (sectionBelow != null) {
+                lightLevel = Math.max(lightLevel, sectionBelow.getLight(skyLight, x, (y - 1) & 0xf, z));
+            }
+        }
+
+        // Slice above
+        if (y <= 254) {
+            final LightingChunkSection sectionAbove = this.sections[(y + 1) >> 4];
+            if (sectionAbove != null) {
+                lightLevel = Math.max(lightLevel, sectionAbove.getLight(skyLight, x, (y + 1) & 0xf, z));
+            }
+        }
+
+        return lightLevel;
+    }
+
+    private final int getLightLevel(boolean skyLight, int x, int y, int z) {
         // Outside the blocks space of this chunk?
         final LightingChunk chunk = (x & OB | z & OB) == 0 ? this : neighbors.get(x >> 4, z >> 4);
         final LightingChunkSection section = chunk.sections[y >> 4];
         return section == null ? 0 : section.getLight(skyLight, x & 0xf, y & 0xf, z & 0xf);
     }
+
 
     /**
      * Gets whether this lighting chunk has faults that need to be fixed
@@ -226,16 +271,13 @@ public class LightingChunk {
                         if (factor == 15) {
                             continue;
                         }
+
+                        // Read the old light level and try to find a light level around it that exceeds
                         light = chunksection.getLight(skyLight, x, y & 0xf, z);
                         newlight = light + factor;
-                        // obtain lighting from all sides
-                        newlight = Math.max(newlight, getLightLevel(skyLight, x - 1, y, z));
-                        newlight = Math.max(newlight, getLightLevel(skyLight, x + 1, y, z));
-                        newlight = Math.max(newlight, getLightLevel(skyLight, x, y, z - 1));
-                        newlight = Math.max(newlight, getLightLevel(skyLight, x, y, z + 1));
-                        newlight = Math.max(newlight, getLightLevel(skyLight, x, y - 1, z));
-                        newlight = Math.max(newlight, getLightLevel(skyLight, x, y + 1, z));
+                        newlight = getMaxLightLevel(skyLight, newlight, x, y, z);
                         newlight -= factor;
+
                         // pick the highest value
                         if (newlight > light) {
                             chunksection.setLight(skyLight, x, y & 0xf, z, newlight);
