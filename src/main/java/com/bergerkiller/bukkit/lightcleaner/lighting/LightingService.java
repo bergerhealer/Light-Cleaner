@@ -338,15 +338,19 @@ public class LightingService extends AsyncTask {
             taskChunkCount -= currentTask.getChunkCount();
             // Process the task
             currentTask.process();
+
             // Protection against 'out of memory' issues
+            // Every time a lighting task is done, we leave behind a very large amount of data
+            // This includes LightingChunk data, but also Chunk data
+            // Without explicit calls to gc() this does not appear to be cleaned up, resulting in out of memory
             final Runtime runtime = Runtime.getRuntime();
-            if (runtime.freeMemory() >= LightCleaner.minFreeMemory) {
-                return;
-            }
             runtime.gc();
+
+            // If we exceed the limit, proceed to take further measures
             if (runtime.freeMemory() >= LightCleaner.minFreeMemory) {
                 return;
             }
+
             // Save all worlds: memory after garbage collecting is still too high
             LightCleaner.plugin.log(Level.WARNING, "Saving all worlds to free some memory...");
             for (World world : WorldUtil.getWorlds()) {
@@ -362,6 +366,11 @@ public class LightingService extends AsyncTask {
                 LightCleaner.plugin.log(Level.WARNING, "Almost running out of memory still (" + freemb + "MB) ...waiting for a bit");
                 sleep(10000);
                 runtime.gc();
+
+                // Wait until memory drops below safe values. Do check if aborting!
+                while (runtime.freeMemory() < LightCleaner.minFreeMemory && !fixThread.isStopRequested()) {
+                    sleep(1000);
+                }
             }
         }
     }

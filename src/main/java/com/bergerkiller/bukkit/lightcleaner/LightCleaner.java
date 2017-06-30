@@ -46,12 +46,13 @@ public class LightCleaner extends PluginBase {
         config.setHeader("This is the configuration of Light Cleaner, in here you can enable or disable features as you please");
 
         // Minimum free memory to perform fixes when loading chunks
-        config.setHeader("minFreeMemory", "The minimum amount of memory (in MB) allowed while processing chunk lighting");
+        config.setHeader("minFreeMemory", "\nThe minimum amount of memory (in MB) allowed while processing chunk lighting");
         config.addHeader("minFreeMemory", "If the remaining free memory drops below this value, measures are taken to reduce it");
         config.addHeader("minFreeMemory", "Memory will be Garbage Collected and all worlds will be saved to free memory");
-        minFreeMemory = 1024 * 1024 * config.get("minFreeMemory", 100);
+        config.addHeader("minFreeMemory", "The process will be stalled for so long free memory is below this value");
+        minFreeMemory = 1024 * 1024 * config.get("minFreeMemory", 200);
 
-        config.setHeader("autoCleanEnabled", "Sets whether lighting is cleaned up for newly generated chunks");
+        config.setHeader("autoCleanEnabled", "\nSets whether lighting is cleaned up for newly generated chunks");
         config.addHeader("autoCleanEnabled", "This will eliminate dark shadows during world generation");
         autoCleanEnabled = config.get("autoCleanEnabled", false);
 
