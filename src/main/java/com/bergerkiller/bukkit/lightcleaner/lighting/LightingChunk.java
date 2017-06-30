@@ -278,7 +278,8 @@ public class LightingChunk {
                     startY = skyLight ? getHeight(x, z) : maxY;
                     for (y = startY; y > 0; y--) {
                         if ((chunksection = this.sections[y >> 4]) == null) {
-                            y = ((y >> 4) - 1) << 4; // skip section
+                            // Skip this section entirely by setting y to the bottom of the section
+                            y &= ~0xf;
                             continue;
                         }
                         factor = Math.max(1, chunksection.opacity.get(x, y & 0xf, z));
