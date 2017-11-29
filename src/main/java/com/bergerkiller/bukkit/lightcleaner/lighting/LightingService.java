@@ -156,7 +156,6 @@ public class LightingService extends AsyncTask {
                     return;
                 }
                 LightCleaner.plugin.log(Level.INFO, "Continuing previously saved lighting operations (" + count + ")...");
-                long chunk;
                 for (int c = 0; c < count; c++) {
                     String worldName = stream.readUTF();
                     World world = Bukkit.getWorld(worldName);
@@ -336,6 +335,9 @@ public class LightingService extends AsyncTask {
                         savePendingBatches();
                     }
                 }.start();
+
+                // Save the world of the current task being processed
+                WorldUtil.saveToDisk(currentTask.getWorld());
             }
             // Subtract task from the task count
             taskChunkCount -= currentTask.getChunkCount();

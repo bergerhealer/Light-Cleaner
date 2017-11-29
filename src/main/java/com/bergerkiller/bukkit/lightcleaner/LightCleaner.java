@@ -1,6 +1,7 @@
 package com.bergerkiller.bukkit.lightcleaner;
 
 import java.io.File;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -50,7 +51,13 @@ public class LightCleaner extends PluginBase {
         config.addHeader("minFreeMemory", "If the remaining free memory drops below this value, measures are taken to reduce it");
         config.addHeader("minFreeMemory", "Memory will be Garbage Collected and all worlds will be saved to free memory");
         config.addHeader("minFreeMemory", "The process will be stalled for so long free memory is below this value");
-        minFreeMemory = 1024 * 1024 * config.get("minFreeMemory", 200);
+
+        int minFreeMemOption = config.get("minFreeMemory", 400);
+        if (minFreeMemOption < 400) {
+            log(Level.WARNING, "minFreeMemory is set to " + minFreeMemOption + "MB which is less than recommended (400MB)");
+            log(Level.WARNING, "It is recommended to correct this in the config.yml of Light Cleaner, or risk out of memory errors");
+        }
+        minFreeMemory = (long) (1024 * 1024) * (long) minFreeMemOption;
 
         config.setHeader("autoCleanEnabled", "\nSets whether lighting is cleaned up for newly generated chunks");
         config.addHeader("autoCleanEnabled", "This will eliminate dark shadows during world generation");
