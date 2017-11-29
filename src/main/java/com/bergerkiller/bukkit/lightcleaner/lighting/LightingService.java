@@ -5,7 +5,6 @@ import com.bergerkiller.bukkit.common.Task;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.config.CompressedDataReader;
 import com.bergerkiller.bukkit.common.config.CompressedDataWriter;
-import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.StringUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
@@ -96,16 +95,21 @@ public class LightingService extends AsyncTask {
      * @param radius
      */
     public static void scheduleArea(World world, int middleX, int middleZ, int radius) {
-        List<IntVector2> chunks = new ArrayList<IntVector2>();
+        LongHashSet chunks = new LongHashSet((2*radius)*(2*radius));
         for (int a = -radius; a <= radius; a++) {
             for (int b = -radius; b <= radius; b++) {
-                chunks.add(new IntVector2(middleX + a, middleZ + b));
+                chunks.add(middleX + a, middleZ + b);
             }
         }
         schedule(world, chunks);
     }
 
+    @Deprecated
     public static void schedule(World world, Collection<IntVector2> chunks) {
+        schedule(new LightingTaskBatch(world, chunks));
+    }
+
+    public static void schedule(World world, LongHashSet chunks) {
         schedule(new LightingTaskBatch(world, chunks));
     }
 
@@ -152,7 +156,6 @@ public class LightingService extends AsyncTask {
                     return;
                 }
                 LightCleaner.plugin.log(Level.INFO, "Continuing previously saved lighting operations (" + count + ")...");
-                final List<IntVector2> coords = new ArrayList<IntVector2>(2000);
                 long chunk;
                 for (int c = 0; c < count; c++) {
                     String worldName = stream.readUTF();
@@ -166,14 +169,14 @@ public class LightingService extends AsyncTask {
                         }
                     }
                     final int chunkCount = stream.readInt();
+                    LongHashSet coords = new LongHashSet(chunkCount);
                     if (world == null) {
                         stream.skip(chunkCount * (Long.SIZE / Byte.SIZE));
                         continue;
                     }
                     // Load all the coordinates
                     for (int i = 0; i < chunkCount; i++) {
-                        chunk = stream.readLong();
-                        coords.add(new IntVector2(MathUtil.longHashLsw(chunk), MathUtil.longHashMsw(chunk)));
+                        coords.add(stream.readLong());
                     }
                     // Schedule and clear
                     schedule(world, coords);

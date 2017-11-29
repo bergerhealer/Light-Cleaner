@@ -1,20 +1,19 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import java.util.HashMap;
-import java.util.HashSet;
 
 import org.bukkit.World;
 
 import com.bergerkiller.bukkit.common.Task;
-import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
+import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 
 /**
  * Handles the automatic cleanup of chunk lighting when chunks are generated
  */
 public class LightingAutoClean {
-    private static HashMap<World, HashSet<IntVector2>> queues = new HashMap<World, HashSet<IntVector2>>();
+    private static HashMap<World, LongHashSet> queues = new HashMap<World, LongHashSet>();
     private static Task autoCleanTask = null;
 
     /**
@@ -61,16 +60,16 @@ public class LightingAutoClean {
     }
 
     public static void schedule(World world, int chunkX, int chunkZ) {
-        HashSet<IntVector2> queue = queues.get(world);
+        LongHashSet queue = queues.get(world);
         if (queue == null) {
-            queue = new HashSet<IntVector2>(9);
+            queue = new LongHashSet(9);
             queues.put(world, queue);
         }
 
         // Queue this chunk, and all its neighbours
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
-                queue.add(new IntVector2(chunkX + dx, chunkZ + dz));
+                queue.add(chunkX + dx, chunkZ + dz);
             }
         }
 
@@ -81,7 +80,7 @@ public class LightingAutoClean {
                 public void run() {
                     while (queues.size() > 0) {
                         World world = queues.keySet().iterator().next();
-                        HashSet<IntVector2> chunks = queues.remove(world);
+                        LongHashSet chunks = queues.remove(world);
                         LightingService.schedule(world, chunks);
                     }
                 }

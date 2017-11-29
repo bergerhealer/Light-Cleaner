@@ -1,14 +1,15 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.bases.IntVector2;
+import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
+import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
+
 import org.bukkit.Chunk;
 import org.bukkit.World;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 
 /**
  * Contains all the chunk coordinates that have to be fixed,
@@ -19,26 +20,28 @@ public class LightingTaskBatch implements LightingTask {
     public static final int MAX_PROCESSING_TICK_TIME = 30; // max ms per tick processing
     private static boolean DEBUG_LOG = false; // logs performance stats
     public final World world;
-    private final List<LightingChunk> chunks;
-    private final LongHashSet chunksCoords = new LongHashSet();
+    private LightingChunk[] chunks = null;
+    private final LongHashSet chunksCoords;
     private final Object waitObject = new Object();
     private Runnable activeTask = null;
+    private boolean done = false;
 
+    @Deprecated
     public LightingTaskBatch(World world, Collection<IntVector2> chunkCoordinates) {
-        // Initialization
+        this(world, getCoords(chunkCoordinates));
+    }
+
+    public LightingTaskBatch(World world, LongHashSet chunkCoordinates) {
         this.world = world;
-        this.chunks = new ArrayList<LightingChunk>(chunkCoordinates.size());
+        this.chunksCoords = chunkCoordinates;
+    }
+
+    private static LongHashSet getCoords(Collection<IntVector2> chunkCoordinates) {
+        LongHashSet result = new LongHashSet(chunkCoordinates.size());
         for (IntVector2 coord : chunkCoordinates) {
-            this.chunks.add(new LightingChunk(coord.x, coord.z));
-            this.chunksCoords.add(coord.x, coord.z);
+            result.add(coord.x, coord.z);
         }
-        // Accessibility
-        // Load the chunk with data
-        for (LightingChunk lc : this.chunks) {
-            for (LightingChunk neigh : this.chunks) {
-                lc.notifyAccessible(neigh);
-            }
-        }
+        return result;
     }
 
     @Override
@@ -52,6 +55,9 @@ public class LightingTaskBatch implements LightingTask {
 
     @Override
     public int getChunkCount() {
+        if (this.chunks == null) {
+            return this.done ? 0 : this.chunksCoords.size();
+        }
         int faults = 0;
         for (LightingChunk chunk : this.chunks) {
             if (chunk.hasFaults()) {
@@ -68,6 +74,26 @@ public class LightingTaskBatch implements LightingTask {
 
     @Override
     public void process() {
+        // Initialize lighting chunks
+        this.done = false;
+        this.chunks = new LightingChunk[this.chunksCoords.size()];
+        int chunkIdx = 0;
+        LongIterator coordIter = this.chunksCoords.longIterator();
+        while (coordIter.hasNext()) {
+            long longCoord = coordIter.next();
+            int x = MathUtil.longHashMsw(longCoord);
+            int z = MathUtil.longHashLsw(longCoord);
+            this.chunks[chunkIdx++] = new LightingChunk(x, z);
+        }
+
+        // Accessibility
+        // Load the chunk with data
+        for (LightingChunk lc : this.chunks) {
+            for (LightingChunk neigh : this.chunks) {
+                lc.notifyAccessible(neigh);
+            }
+        }
+
         // Load
         startLoading();
         waitForCompletion();
@@ -76,6 +102,8 @@ public class LightingTaskBatch implements LightingTask {
         // Apply
         startApplying();
         waitForCompletion();
+        this.done = true;
+        this.chunks = null;
     }
 
     /**

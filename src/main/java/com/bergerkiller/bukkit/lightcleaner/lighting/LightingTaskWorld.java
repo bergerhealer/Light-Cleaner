@@ -1,6 +1,5 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
-import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashMap;
@@ -177,20 +176,19 @@ public class LightingTaskWorld implements LightingTask {
 
         // We now know of all the regions to be processed, convert all of them into tasks
         // Use a slightly larger area to avoid cross-region errors
-        final List<IntVector2> buffer = new ArrayList<IntVector2>(1100);
         for (WorldRegion region : regions.getValues()) {
             // Put the coordinates that are available
+            final LongHashSet buffer = new LongHashSet(2000);
             for (dx = -1; dx < 33; dx++) {
                 for (dz = -1; dz < 33; dz++) {
                     if (chunks.contains(region.rx + dx, region.rz + dz)) {
-                        buffer.add(new IntVector2(region.rx + dx, region.rz + dz));
+                        buffer.add(region.rx + dx, region.rz + dz);
                     }
                 }
             }
             // Reduce count, schedule and clear the buffer
             this.chunkCount -= buffer.size();
             LightingService.schedule(world, buffer);
-            buffer.clear();
         }
     }
 
