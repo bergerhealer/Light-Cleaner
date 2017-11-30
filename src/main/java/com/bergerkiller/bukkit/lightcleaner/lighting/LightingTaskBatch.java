@@ -49,14 +49,18 @@ public class LightingTaskBatch implements LightingTask {
         return world;
     }
 
-    public LongHashSet getChunks() {
-        return chunksCoords;
+    public long[] getChunks() {
+        synchronized (this.chunksCoords) {
+            return chunksCoords.toArray();
+        }
     }
 
     @Override
     public int getChunkCount() {
         if (this.chunks == null) {
-            return this.done ? 0 : this.chunksCoords.size();
+            synchronized (this.chunksCoords) {
+                return this.done ? 0 : this.chunksCoords.size();
+            }
         }
         int faults = 0;
         for (LightingChunk chunk : this.chunks) {
@@ -69,7 +73,9 @@ public class LightingTaskBatch implements LightingTask {
 
     @Override
     public boolean containsChunk(int chunkX, int chunkZ) {
-        return chunksCoords.contains(chunkX, chunkZ);
+        synchronized (this.chunksCoords) {
+            return this.chunksCoords.contains(chunkX, chunkZ);
+        }
     }
 
     @Override
@@ -186,7 +192,9 @@ public class LightingTaskBatch implements LightingTask {
                     // Resend to players
                     boolean isPlayerNear = WorldUtil.queueChunkSend(world, lc.chunkX, lc.chunkZ);
                     // Try to unload if no player near
-                    LightingTaskBatch.this.chunksCoords.remove(lc.chunkX, lc.chunkZ);
+                    synchronized (LightingTaskBatch.this.chunksCoords) {
+                        LightingTaskBatch.this.chunksCoords.remove(lc.chunkX, lc.chunkZ);
+                    }
                     if (!isPlayerNear) {
                         world.unloadChunkRequest(lc.chunkX, lc.chunkZ, true);
                     }

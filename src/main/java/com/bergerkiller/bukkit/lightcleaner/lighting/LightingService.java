@@ -168,18 +168,17 @@ public class LightingService extends AsyncTask {
                         }
                     }
                     final int chunkCount = stream.readInt();
-                    LongHashSet coords = new LongHashSet(chunkCount);
                     if (world == null) {
                         stream.skip(chunkCount * (Long.SIZE / Byte.SIZE));
                         continue;
                     }
                     // Load all the coordinates
+                    LongHashSet coords = new LongHashSet(chunkCount);
                     for (int i = 0; i < chunkCount; i++) {
                         coords.add(stream.readLong());
                     }
                     // Schedule and clear
                     schedule(world, coords);
-                    coords.clear();
                 }
             }
         }.read()) {
@@ -230,9 +229,9 @@ public class LightingService extends AsyncTask {
                         // Write world name
                         stream.writeUTF(batch.getWorld().getName());
                         // Write all chunks
-                        LongHashSet chunks = batch.getChunks();
-                        stream.writeInt(chunks.size());
-                        for (long chunk : chunks.toArray()) {
+                        long[] chunks = batch.getChunks();
+                        stream.writeInt(chunks.length);
+                        for (long chunk : chunks) {
                             stream.writeLong(chunk);
                         }
                     }
