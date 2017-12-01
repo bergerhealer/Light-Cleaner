@@ -187,17 +187,24 @@ public class LightingTaskBatch implements LightingTask {
                     }
                     applied = true;
                     Chunk bchunk = world.getChunkAt(lc.chunkX, lc.chunkZ);
-                    // Save to chunk
-                    lc.saveToChunk(bchunk);
-                    // Resend to players
-                    boolean isPlayerNear = WorldUtil.queueChunkSend(world, lc.chunkX, lc.chunkZ);
-                    // Try to unload if no player near
+
+                    // Remove chunk from management so that it can be unloaded
                     synchronized (LightingTaskBatch.this.chunksCoords) {
                         LightingTaskBatch.this.chunksCoords.remove(lc.chunkX, lc.chunkZ);
                     }
-                    if (!isPlayerNear) {
+
+                    // Save to chunk
+                    if (lc.saveToChunk(bchunk)) {
+                        // Chunk changed, we need to resend to players
+                        boolean isPlayerNear = WorldUtil.queueChunkSend(world, lc.chunkX, lc.chunkZ);
+                        if (!isPlayerNear) {
+                            world.unloadChunkRequest(lc.chunkX, lc.chunkZ, true);
+                        }
+                    } else {
+                        // No changes. Unload the chunk if no player is nearby.
                         world.unloadChunkRequest(lc.chunkX, lc.chunkZ, true);
                     }
+
                     // Too long?
                     if ((System.currentTimeMillis() - startTime) > MAX_PROCESSING_TICK_TIME) {
                         break;

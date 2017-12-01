@@ -346,8 +346,9 @@ public class LightingChunk {
      * Applies the lighting information to a chunk
      *
      * @param chunk to save to
+     * @return whether the chunk had any corrected light levels
      */
-    public void saveToChunk(Chunk chunk) {
+    public boolean saveToChunk(Chunk chunk) {
         ChunkSection[] chunkSections = ChunkUtil.getSections(chunk);
         boolean hasChanges = false;
         for (int section = 0; section < SECTION_COUNT; section++) {
@@ -360,6 +361,7 @@ public class LightingChunk {
             markDirtyMethod.invoke(HandleConversion.toChunkHandle(chunk));
         }
         this.isApplied = true;
+        return hasChanges;
     }
 
 }
