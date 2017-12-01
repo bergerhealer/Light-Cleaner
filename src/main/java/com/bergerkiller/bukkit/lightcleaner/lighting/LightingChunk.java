@@ -374,8 +374,8 @@ public class LightingChunk {
 
     private static MethodAccessor<Void> findMarkDirtyMethod() {
         // Find in the most recent BKCommonLib
-        Template.Method<?> bkcMethod = SafeField.get(ChunkHandle.T, "markDirty", Template.Method.class);
-        if (bkcMethod != null) {
+        if (SafeField.contains(ChunkHandle.T.getClass(), "markDirty", Template.Method.class)) {
+            Template.Method<?> bkcMethod = SafeField.get(ChunkHandle.T, "markDirty", Template.Method.class);
             return bkcMethod.toMethodAccessor();
         }
 
