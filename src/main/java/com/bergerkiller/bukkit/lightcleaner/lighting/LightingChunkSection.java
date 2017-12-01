@@ -119,6 +119,6 @@ public class LightingChunkSection {
     private static boolean isNibbleArrayDifferent(NibbleArrayBase n1, Object n2) {
         if (n1 == null) return false;
         if (n2 == null) return true;
-        return Arrays.equals(n1.getData(), NibbleArrayHandle.createHandle(n2).getData());
+        return !Arrays.equals(n1.getData(), NibbleArrayHandle.createHandle(n2).getData());
     }
 }
