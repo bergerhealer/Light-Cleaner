@@ -2,9 +2,12 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.bases.NibbleArrayBase;
+import com.bergerkiller.bukkit.common.conversion.type.HandleConversion;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
+import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
+import com.bergerkiller.mountiplex.reflection.SafeMethod;
 
 import org.bukkit.Chunk;
 
@@ -24,6 +27,7 @@ public class LightingChunk {
     public static final int SECTION_COUNT = 16;
     public static final int OB = ~0xf; // Outside blocks
     public static final int OC = ~0xff; // Outside chunk
+    private static final SafeMethod<Void> markDirtyMethod = new SafeMethod<Void>(ChunkHandle.T.getType(), "markDirty");
     public final LightingChunkSection[] sections = new LightingChunkSection[SECTION_COUNT];
     public final LightingChunkNeighboring neighbors = new LightingChunkNeighboring();
     public final byte[] heightmap = new byte[256];
@@ -345,11 +349,17 @@ public class LightingChunk {
      */
     public void saveToChunk(Chunk chunk) {
         ChunkSection[] chunkSections = ChunkUtil.getSections(chunk);
+        boolean hasChanges = false;
         for (int section = 0; section < SECTION_COUNT; section++) {
             if (chunkSections[section] != null && sections[section] != null) {
-                sections[section].saveToChunk(chunkSections[section]);
+                hasChanges |= sections[section].saveToChunk(chunkSections[section]);
             }
+        }
+        if (hasChanges) {
+            // Call markDirty() on the chunk
+            markDirtyMethod.invoke(HandleConversion.toChunkHandle(chunk));
         }
         this.isApplied = true;
     }
+
 }

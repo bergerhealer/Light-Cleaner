@@ -1,8 +1,11 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
+import java.util.Arrays;
+
 import com.bergerkiller.bukkit.common.bases.NibbleArrayBase;
 import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
+import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
 import com.bergerkiller.reflection.net.minecraft.server.NMSChunkSection;
 
 public class LightingChunkSection {
@@ -96,12 +99,26 @@ public class LightingChunkSection {
      * Applies the lighting information to a chunk section
      *
      * @param chunkSection to save to
+     * @return True if data in the chunk section changed as a result
      */
-    public void saveToChunk(ChunkSection chunkSection) {
+    public boolean saveToChunk(ChunkSection chunkSection) {
+        boolean changed = false;
         Object handle = chunkSection.getHandle();
-        NMSChunkSection.blockLight.set(handle, blockLight.toHandle());
-        if (skyLight != null) {
-            NMSChunkSection.skyLight.set(handle, skyLight.toHandle());
+
+        if (isNibbleArrayDifferent(blockLight, NMSChunkSection.blockLight.get(handle))) {
+            NMSChunkSection.blockLight.set(handle, blockLight.toHandle());
+            changed = true;
         }
+        if (isNibbleArrayDifferent(skyLight, NMSChunkSection.skyLight.get(handle))) {
+            NMSChunkSection.skyLight.set(handle, skyLight.toHandle());
+            changed = true;
+        }
+        return changed;
+    }
+
+    private static boolean isNibbleArrayDifferent(NibbleArrayBase n1, Object n2) {
+        if (n1 == null) return false;
+        if (n2 == null) return true;
+        return Arrays.equals(n1.getData(), NibbleArrayHandle.createHandle(n2).getData());
     }
 }
