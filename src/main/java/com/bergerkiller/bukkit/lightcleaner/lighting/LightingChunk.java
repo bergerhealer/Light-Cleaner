@@ -7,7 +7,11 @@ import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
+import com.bergerkiller.mountiplex.reflection.MethodAccessor;
+import com.bergerkiller.mountiplex.reflection.SafeDirectMethod;
+import com.bergerkiller.mountiplex.reflection.SafeField;
 import com.bergerkiller.mountiplex.reflection.SafeMethod;
+import com.bergerkiller.mountiplex.reflection.declarations.Template;
 
 import org.bukkit.Chunk;
 
@@ -27,7 +31,6 @@ public class LightingChunk {
     public static final int SECTION_COUNT = 16;
     public static final int OB = ~0xf; // Outside blocks
     public static final int OC = ~0xff; // Outside chunk
-    private static final SafeMethod<Void> markDirtyMethod = new SafeMethod<Void>(ChunkHandle.T.getType(), "markDirty");
     public final LightingChunkSection[] sections = new LightingChunkSection[SECTION_COUNT];
     public final LightingChunkNeighboring neighbors = new LightingChunkNeighboring();
     public final byte[] heightmap = new byte[256];
@@ -364,4 +367,33 @@ public class LightingChunk {
         return hasChanges;
     }
 
+    /*
+     * markDirty() initialization and fallback for older BKCommonLib versions
+     */
+    private static final MethodAccessor<Void> markDirtyMethod = findMarkDirtyMethod();
+
+    private static MethodAccessor<Void> findMarkDirtyMethod() {
+        // Find in the most recent BKCommonLib
+        Template.Method<?> bkcMethod = SafeField.get(ChunkHandle.T, "markDirty", Template.Method.class);
+        if (bkcMethod != null) {
+            return bkcMethod.toMethodAccessor();
+        }
+
+        // Fallback only officially supports MC 1.8.8 - MC1.12.2
+        if (SafeMethod.contains(ChunkHandle.T.getType(), "markDirty")) {
+            // >= MC1.12
+            return new SafeMethod<Void>(ChunkHandle.T.getType(), "markDirty");
+        } else if (SafeMethod.contains(ChunkHandle.T.getType(), "e")) {
+            // < MC1.12
+            return new SafeMethod<Void>(ChunkHandle.T.getType(), "e");
+        } else {
+            // No idea :(
+            return new SafeDirectMethod<Void>() {
+                @Override
+                public Void invoke(Object arg0, Object... arg1) {
+                    return null;
+                }
+            };
+        }
+    }
 }
