@@ -7,6 +7,7 @@ import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
+import com.bergerkiller.generated.net.minecraft.server.WorldHandle;
 import com.bergerkiller.mountiplex.reflection.MethodAccessor;
 import com.bergerkiller.mountiplex.reflection.SafeDirectMethod;
 import com.bergerkiller.mountiplex.reflection.SafeField;
@@ -76,12 +77,12 @@ public class LightingChunk {
 
     public void fill(Chunk chunk) {
         // Fill using chunk sections
+        hasSkyLight = !WorldHandle.fromBukkit(chunk.getWorld()).getWorldProvider().isDarkWorld();
         ChunkSection[] chunkSections = ChunkUtil.getSections(chunk);
         for (int section = 0; section < SECTION_COUNT; section++) {
             ChunkSection chunkSection = chunkSections[section];
             if (chunkSection != null) {
-                hasSkyLight &= chunkSection.hasSkyLight();
-                sections[section] = new LightingChunkSection(this, chunkSection);
+                sections[section] = new LightingChunkSection(this, chunkSection, hasSkyLight);
             }
         }
         this.isFilled = true;

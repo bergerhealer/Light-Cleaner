@@ -14,7 +14,7 @@ public class LightingChunkSection {
     public final NibbleArrayBase blockLight;
     public final NibbleArrayBase opacity;
 
-    public LightingChunkSection(LightingChunk owner, ChunkSection chunkSection) {
+    public LightingChunkSection(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
         this.owner = owner;
 
         // Block light data
@@ -23,6 +23,8 @@ public class LightingChunkSection {
         // Sky light data
         if (chunkSection.hasSkyLight()) {
             this.skyLight = new NibbleArrayBase(chunkSection.getSkyLightData());
+        } else if (hasSkyLight) {
+            this.skyLight = new NibbleArrayBase();
         } else {
             this.skyLight = null;
         }
