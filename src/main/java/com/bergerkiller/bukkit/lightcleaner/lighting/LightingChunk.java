@@ -246,8 +246,8 @@ public class LightingChunk {
 
         boolean err_neigh_nx = false;
         boolean err_neigh_px = false;
-        boolean err_neigh_ny = false;
-        boolean err_neigh_py = false;
+        boolean err_neigh_nz = false;
+        boolean err_neigh_pz = false;
 
         LightingChunkSection chunksection;
         // Keep spreading the light in this chunk until it is done
@@ -310,9 +310,9 @@ public class LightingChunk {
                             lasterry = y;
                             lasterrz = z;
                             err_neigh_nx |= (x == 0);
-                            err_neigh_ny |= (y == 0);
+                            err_neigh_nz |= (z == 0);
                             err_neigh_px |= (x == 15);
-                            err_neigh_py |= (y == 15);
+                            err_neigh_pz |= (z == 15);
                             haserror = true;
                         }
                     }
@@ -329,14 +329,14 @@ public class LightingChunk {
         // When we change blocks at our chunk borders, neighbours have to do another spread cycle
         if (err_neigh_nx) markNeighbor(-1, 0, skyLight);
         if (err_neigh_px) markNeighbor(1, 0, skyLight);
-        if (err_neigh_ny) markNeighbor(0, -1, skyLight);
-        if (err_neigh_py) markNeighbor(0, 1, skyLight);
+        if (err_neigh_nz) markNeighbor(0, -1, skyLight);
+        if (err_neigh_pz) markNeighbor(0, 1, skyLight);
 
         return loops;
     }
 
-    private void markNeighbor(int dx, int dy, boolean skyLight) {
-        LightingChunk n = neighbors.get(dx, dy);
+    private void markNeighbor(int dx, int dz, boolean skyLight) {
+        LightingChunk n = neighbors.get(dx, dz);
         if (n != null) {
             if (skyLight) {
                 n.isSkyLightDirty = true;
