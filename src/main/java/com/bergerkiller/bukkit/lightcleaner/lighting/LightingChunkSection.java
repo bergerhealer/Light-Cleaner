@@ -1,71 +1,55 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
-import java.util.Arrays;
+import org.bukkit.World;
 
-import com.bergerkiller.bukkit.common.bases.NibbleArrayBase;
 import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
-import com.bergerkiller.reflection.net.minecraft.server.NMSChunkSection;
 
 public class LightingChunkSection {
     public final LightingChunk owner;
-    public final NibbleArrayBase skyLight;
-    public final NibbleArrayBase blockLight;
-    public final NibbleArrayBase opacity;
+    public final NibbleArrayHandle skyLight;
+    public final NibbleArrayHandle blockLight;
+    public final NibbleArrayHandle opacity;
 
-    public LightingChunkSection(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
+    public LightingChunkSection(World world, LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
         this.owner = owner;
 
         // Block light data
-        this.blockLight = new NibbleArrayBase(chunkSection.getBlockLightData());
+        this.blockLight = NibbleArrayHandle.createNew(chunkSection.getBlockLightData());
 
         // Sky light data
         if (chunkSection.hasSkyLight()) {
-            this.skyLight = new NibbleArrayBase(chunkSection.getSkyLightData());
+            this.skyLight = NibbleArrayHandle.createNew(chunkSection.getSkyLightData());
         } else if (hasSkyLight) {
-            this.skyLight = new NibbleArrayBase();
+            this.skyLight = NibbleArrayHandle.createNew();
         } else {
             this.skyLight = null;
         }
 
+        // World coordinates
+        int worldX = owner.chunkX << 4;
+        int worldY = chunkSection.getYPosition();
+        int worldZ = owner.chunkZ << 4;
+
         // Fill opacity and initial block lighting values
-        this.opacity = new NibbleArrayBase();
-        int x, y, z, opacity, maxlight, light, blockEmission;
-        boolean withinBounds;
+        this.opacity = NibbleArrayHandle.createNew();
+        int x, y, z, opacity, blockEmission;
         BlockData info;
-        for (x = 0; x < 16; x++) {
-            for (z = 0; z < 16; z++) {
-                withinBounds = x >= owner.start.x && x <= owner.end.x && z >= owner.start.z && z <= owner.end.z;
+        for (x = owner.start.x; x <= owner.end.x; x++) {
+            for (z = owner.start.z; z <= owner.end.z; z++) {
                 for (y = 0; y < 16; y++) {
                     info = chunkSection.getBlockData(x, y, z);
-                    opacity = info.getOpacity() & 0xf;
                     blockEmission = info.getEmission();
-                    if (withinBounds) {
-                        // Within bounds: Regenerate (skylight is regenerated elsewhere)
-                        this.opacity.set(x, y, z, opacity);
-                        this.blockLight.set(x, y, z, blockEmission);
-                    } else {
-                        // Outside bounds: only fix blatant errors in the light
-                        maxlight = 15 - opacity;
-
-                        // Sky light
-                        if (this.skyLight != null) {
-                            light = this.skyLight.get(x, y, z);
-                            if (light > maxlight) {
-                                this.skyLight.set(x, y, z, 0);
-                            }
-                        }
-
-                        // Block light (take in account light emission values)
-                        if (blockEmission > maxlight) {
-                            maxlight = blockEmission;
-                        }
-                        light = this.blockLight.get(x, y, z);
-                        if (light > maxlight) {
-                            this.blockLight.set(x, y, z, 0);
-                        }
+                    opacity = info.getOpacity(world, worldX+x, worldY+y, worldZ+z);
+                    if (opacity <= 0) {
+                        opacity = 1;
+                    } else if (opacity > 0xF) {
+                        opacity = 0xF;
                     }
+
+                    this.opacity.set(x, y, z, opacity);
+                    this.blockLight.set(x, y, z, blockEmission);
                 }
             }
         }
@@ -105,22 +89,20 @@ public class LightingChunkSection {
      */
     public boolean saveToChunk(ChunkSection chunkSection) {
         boolean changed = false;
-        Object handle = chunkSection.getHandle();
-
-        if (isNibbleArrayDifferent(blockLight, NMSChunkSection.blockLight.get(handle))) {
-            NMSChunkSection.blockLight.set(handle, blockLight.toHandle());
+        if (isNibbleArrayDifferent(blockLight, chunkSection.getBlockLightNibbleArray())) {
+            chunkSection.setBlockLightNibbleArray(blockLight);
             changed = true;
         }
-        if (isNibbleArrayDifferent(skyLight, NMSChunkSection.skyLight.get(handle))) {
-            NMSChunkSection.skyLight.set(handle, skyLight.toHandle());
+        if (isNibbleArrayDifferent(skyLight, chunkSection.getSkyLightNibbleArray())) {
+            chunkSection.setSkyLightNibbleArray(skyLight);
             changed = true;
         }
         return changed;
     }
 
-    private static boolean isNibbleArrayDifferent(NibbleArrayBase n1, Object n2) {
+    private static boolean isNibbleArrayDifferent(NibbleArrayHandle n1, NibbleArrayHandle n2) {
         if (n1 == null) return false;
         if (n2 == null) return true;
-        return !Arrays.equals(n1.getData(), NibbleArrayHandle.createHandle(n2).getData());
+        return !n1.dataEquals(n2);
     }
 }

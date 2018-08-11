@@ -1,12 +1,13 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.bases.IntVector2;
-import com.bergerkiller.bukkit.common.bases.NibbleArrayBase;
 import com.bergerkiller.bukkit.common.conversion.type.HandleConversion;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
+import com.bergerkiller.bukkit.common.wrappers.HeightMap;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
+import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
 import com.bergerkiller.generated.net.minecraft.server.WorldHandle;
 import com.bergerkiller.mountiplex.reflection.MethodAccessor;
 import com.bergerkiller.mountiplex.reflection.SafeDirectMethod;
@@ -16,6 +17,7 @@ import com.bergerkiller.mountiplex.reflection.declarations.Template;
 
 import org.bukkit.Chunk;
 
+import java.util.Arrays;
 import java.util.logging.Level;
 
 /**
@@ -34,7 +36,7 @@ public class LightingChunk {
     public static final int OC = ~0xff; // Outside chunk
     public final LightingChunkSection[] sections = new LightingChunkSection[SECTION_COUNT];
     public final LightingChunkNeighboring neighbors = new LightingChunkNeighboring();
-    public final byte[] heightmap = new byte[256];
+    public final int[] heightmap = new int[256];
     public final int chunkX, chunkZ;
     public boolean hasSkyLight = true;
     public boolean isSkyLightDirty = true;
@@ -77,14 +79,28 @@ public class LightingChunk {
 
     public void fill(Chunk chunk) {
         // Fill using chunk sections
-        hasSkyLight = !WorldHandle.fromBukkit(chunk.getWorld()).getWorldProvider().isDarkWorld();
+        hasSkyLight = WorldHandle.fromBukkit(chunk.getWorld()).getWorldProvider().hasSkyLight();
         ChunkSection[] chunkSections = ChunkUtil.getSections(chunk);
         for (int section = 0; section < SECTION_COUNT; section++) {
             ChunkSection chunkSection = chunkSections[section];
             if (chunkSection != null) {
-                sections[section] = new LightingChunkSection(this, chunkSection, hasSkyLight);
+                sections[section] = new LightingChunkSection(chunk.getWorld(), this, chunkSection, hasSkyLight);
             }
         }
+
+        // Initialize and then load sky light heightmap information
+        if (this.hasSkyLight) {
+            HeightMap heightmap = ChunkUtil.getHeightMap(chunk, HeightMap.Type.LIGHT_BLOCKING);
+            heightmap.initialize();
+            for (int x = 0; x < 16; ++x) {
+                for (int z = 0; z < 16; ++z) {
+                    this.heightmap[this.getHeightKey(x, z)] = heightmap.getHeight(x, z);
+                }
+            }
+        } else {
+            Arrays.fill(this.heightmap, ChunkHandle.fromBukkit(chunk).getTopSliceY() + 15);
+        }
+
         this.isFilled = true;
     }
 
@@ -119,35 +135,35 @@ public class LightingChunk {
         if (!hasSkyLight) {
             return;
         }
+
         // Find out the highest possible Y-position
         int topY = getTopY();
-        int x, y, z, light, darkLight, height, opacity;
+        int x, y, z, light, height, opacity;
         LightingChunkSection section;
         // Apply initial sky lighting from top to bottom
         for (x = start.x; x <= end.x; x++) {
             for (z = start.z; z <= end.z; z++) {
                 light = 15;
-                darkLight = topY;
-                height = 0;
+                height = getHeight(x, z);
                 for (y = topY; y >= 0; y--) {
                     if ((section = sections[y >> 4]) == null) {
                         // Skip the remaining 15: they are all inaccessible as well
                         y -= 15;
                         continue;
                     }
-                    // Apply the opacity to the light level
-                    opacity = section.opacity.get(x, y & 0xf, z);
-                    if (light <= 0 || --darkLight <= 0 || (light -= opacity) <= 0) {
-                        light = 0;
+
+                    // Only process these once below the height at this x/z
+                    if (y <= height) {
+                        // Apply the opacity to the light level
+                        opacity = section.opacity.get(x, y & 0xf, z);
+                        if (light <= 0 || (light -= opacity) <= 0) {
+                            light = 0;
+                        }
                     }
-                    // No longer in the air? Update height
-                    if (light != 15 && y > height) {
-                        height = y;
-                    }
+
                     // Apply sky light to block
                     section.skyLight.set(x, y & 0xf, z, light);
                 }
-                heightmap[getHeightKey(x, z)] = (byte) height;
             }
         }
     }
@@ -157,7 +173,7 @@ public class LightingChunk {
         if (x >= 1 && z >= 1 && x <= 14 && z <= 14) {
             // All within this chunk - simplified calculation
             final int dy = y & 0xf;
-            final NibbleArrayBase light = skyLight ? section.skyLight : section.blockLight;
+            final NibbleArrayHandle light = skyLight ? section.skyLight : section.blockLight;
             lightLevel = Math.max(lightLevel, light.get(x - 1, dy, z));
             lightLevel = Math.max(lightLevel, light.get(x + 1, dy, z));
             lightLevel = Math.max(lightLevel, light.get(x, dy, z - 1));
