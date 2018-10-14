@@ -1,6 +1,5 @@
 package com.bergerkiller.bukkit.lightcleaner;
 
-import java.io.File;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
@@ -15,9 +14,7 @@ import com.bergerkiller.bukkit.common.PluginBase;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
 import com.bergerkiller.bukkit.common.utils.ParseUtil;
-import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
-import com.bergerkiller.reflection.net.minecraft.server.NMSRegionFileCache;
 
 public class LightCleaner extends PluginBase {
     public static LightCleaner plugin;
@@ -98,20 +95,12 @@ public class LightCleaner extends PluginBase {
                     return true;
                 }
 
-                // Obtain the region folder
-                File regionFolder = WorldUtil.getWorldRegionFolder(world.getName());
-                if (regionFolder == null && WorldUtil.getChunks(world).isEmpty() && NMSRegionFileCache.FILES.isEmpty()) {
-                    sender.sendMessage(ChatColor.RED + "World " + world.getName() + " contains no loaded chunks neither any offline-stored regions files to read");
-                    sender.sendMessage(ChatColor.RED + "This could be a bug in the program, or it could be that there really are no regions generated (yet?)");
-                    return true;
-                }
-
                 // Fix all the chunks in this world
                 sender.sendMessage(ChatColor.YELLOW + "The world is now being fixed, this may take very long!");
                 sender.sendMessage(ChatColor.YELLOW + "To view the fixing status, use /cleanlight status");
                 LightingService.addRecipient(sender);
                 // Get an iterator for all the chunks to fix
-                LightingService.scheduleWorld(world, regionFolder);
+                LightingService.scheduleWorld(world);
             } else if (subCmd.equalsIgnoreCase("abort")) {
                 // cleanlight abort
                 Permission.ABORT.handle(sender);
@@ -150,6 +139,7 @@ public class LightCleaner extends PluginBase {
                     } else {
                         sender.sendMessage(ChatColor.YELLOW + "Lighting is being cleaned, " + ChatColor.RED + LightingService.getChunkFaults() +
                                 " " + ChatColor.YELLOW + "chunks remaining");
+                        sender.sendMessage(ChatColor.YELLOW + "Current: " + ChatColor.GREEN + LightingService.getCurrentStatus());
                     }
                 } else {
                     sender.sendMessage(ChatColor.GREEN + "No lighting is being processed at this time.");

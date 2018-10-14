@@ -5,10 +5,14 @@ import com.bergerkiller.bukkit.common.Task;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.config.CompressedDataReader;
 import com.bergerkiller.bukkit.common.config.CompressedDataWriter;
+import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.StringUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
+import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
+import com.bergerkiller.bukkit.lightcleaner.util.RegionInfo;
+import com.bergerkiller.bukkit.lightcleaner.util.RegionInfoMap;
 
 import org.bukkit.*;
 import org.bukkit.command.CommandSender;
@@ -93,6 +97,20 @@ public class LightingService extends AsyncTask {
     }
 
     /**
+     * Gets the status of the currently processed task
+     * 
+     * @return current task status
+     */
+    public static String getCurrentStatus() {
+        final LightingTask current = currentTask;
+        if (current == null) {
+            return "Finished.";
+        } else {
+            return current.getStatus();
+        }
+    }
+
+    /**
      * Adds a player who will be notified of the lighting operations being completed
      *
      * @param player to add, null for console
@@ -103,8 +121,8 @@ public class LightingService extends AsyncTask {
         }
     }
 
-    public static void scheduleWorld(final World world, File regionFolder) {
-        schedule(new LightingTaskWorld(world, regionFolder));
+    public static void scheduleWorld(final World world) {
+        schedule(new LightingTaskWorld(world));
     }
 
     /**
@@ -119,7 +137,9 @@ public class LightingService extends AsyncTask {
         LongHashSet chunks = new LongHashSet((2*radius)*(2*radius));
         for (int a = -radius; a <= radius; a++) {
             for (int b = -radius; b <= radius; b++) {
-                chunks.add(middleX + a, middleZ + b);
+                int cx = middleX + a;
+                int cz = middleZ + b;
+                chunks.add(cx, cz);
             }
         }
         schedule(world, chunks);
@@ -135,7 +155,74 @@ public class LightingService extends AsyncTask {
     }
 
     public static void schedule(World world, LongHashSet chunks) {
-        schedule(new LightingTaskBatch(world, chunks));
+        // If less than 34x34 chunks are requested, schedule as one task
+        // In that case, be sure to only schedule chunks that actually exist
+        // This prevents generating new chunks as part of this command
+        if (chunks.size() <= (34*34)) {
+
+            // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
+            // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
+            LongHashSet chunks_filtered = new LongHashSet(chunks.size());
+            LongIterator iter = chunks.longIterator();
+            while (iter.hasNext()) {
+                long chunk = iter.next();
+                int cx = MathUtil.longHashMsw(chunk);
+                int cz = MathUtil.longHashLsw(chunk);
+                if (WorldUtil.isChunkAvailable(world, cx, cz)) {
+                    chunks_filtered.add(chunk);
+                }
+            }
+
+            // Schedule it
+            schedule(new LightingTaskBatch(world, chunks_filtered));
+            return;
+        }
+
+        // Too many chunks requested. Separate the operations per region file with small overlap.
+        RegionInfoMap regions = RegionInfoMap.create(world);
+        LongIterator iter = chunks.longIterator();
+        LongHashSet scheduledRegions = new LongHashSet();
+        while (iter.hasNext()) {
+            long first_chunk = iter.next();
+            int first_chunk_x = MathUtil.longHashMsw(first_chunk);
+            int first_chunk_z = MathUtil.longHashLsw(first_chunk);
+            RegionInfo region = regions.getRegion(first_chunk_x, first_chunk_z);
+            if (region == null || scheduledRegions.contains(region.rx, region.rz)) {
+                continue; // Does not exist or already scheduled
+            }
+            if (!region.containsChunk(first_chunk_x, first_chunk_z)) {
+                continue; // Chunk does not exist in world (not generated yet)
+            }
+
+            // Collect all chunks to process for this region.
+            // This is an union of the 34x34 area of chunks and the region file data set
+            LongHashSet buffer = new LongHashSet();
+            int dx, dz;
+            for (dx = -1; dx < 33; dx++) {
+                for (dz = -1; dz < 33; dz++) {
+                    int cx = region.cx + dx;
+                    int cz = region.cz + dz;
+                    long chunk_key = MathUtil.longHashToLong(cx, cz);
+                    if (!chunks.contains(chunk_key)) {
+                        continue;
+                    }
+                    if (dx >= 0 && dz >= 0 && dx < 32 && dz < 32) {
+                        if (!region.containsChunk(cx, cz)) {
+                            continue;
+                        }
+                    } else {
+                        if (!regions.containsChunk(cx, cz)) {
+                            continue;
+                        }
+                    }
+                    buffer.add(chunk_key);
+                }
+            }
+
+            // Schedule the region
+            scheduledRegions.add(region.rx, region.rz);
+            schedule(new LightingTaskBatch(world, buffer));
+        }
     }
 
     public static void schedule(LightingTask task) {
@@ -203,7 +290,7 @@ public class LightingService extends AsyncTask {
                         coords.add(stream.readLong());
                     }
                     // Schedule and clear
-                    schedule(world, coords);
+                    schedule(new LightingTaskBatch(world, coords));
                 }
             }
         }.read()) {

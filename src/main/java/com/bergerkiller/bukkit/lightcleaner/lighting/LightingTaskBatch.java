@@ -57,6 +57,35 @@ public class LightingTaskBatch implements LightingTask {
     }
 
     @Override
+    public String getStatus() {
+        int count = 0;
+        long cx = 0;
+        long cz = 0;
+        if (this.chunks == null) {
+            synchronized (this.chunksCoords) {
+                LongIterator iter = this.chunksCoords.longIterator();
+                while (iter.hasNext()) {
+                    long chunk = iter.next();
+                    cx += MathUtil.longHashMsw(chunk);
+                    cz += MathUtil.longHashLsw(chunk);
+                    count++;
+                }
+            }
+        } else {
+            for (LightingChunk chunk : this.chunks) {
+                cx += chunk.chunkX;
+                cz += chunk.chunkZ;
+                count++;
+            }
+        }
+        if (count > 0) {
+            cx /= count;
+            cz /= count;
+        }
+        return "Cleaning " + count + " chunks near x=" + (cx*16) + " z=" + (cz*16);
+    }
+
+    @Override
     public boolean containsChunk(int chunkX, int chunkZ) {
         synchronized (this.chunksCoords) {
             return this.chunksCoords.contains(chunkX, chunkZ);

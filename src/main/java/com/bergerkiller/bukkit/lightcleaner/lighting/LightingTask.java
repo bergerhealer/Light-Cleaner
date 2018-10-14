@@ -32,6 +32,13 @@ public interface LightingTask {
     int getChunkCount();
 
     /**
+     * Gets a descriptive status of the current task being processed
+     * 
+     * @return status
+     */
+    String getStatus();
+
+    /**
      * Processes this task (called from another thread!)
      */
     void process();
