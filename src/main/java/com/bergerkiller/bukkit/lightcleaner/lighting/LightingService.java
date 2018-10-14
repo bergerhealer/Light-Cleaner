@@ -127,7 +127,11 @@ public class LightingService extends AsyncTask {
 
     @Deprecated
     public static void schedule(World world, Collection<IntVector2> chunks) {
-        schedule(new LightingTaskBatch(world, chunks));
+        LongHashSet result = new LongHashSet(chunks.size());
+        for (IntVector2 coord : chunks) {
+            result.add(coord.x, coord.z);
+        }
+        schedule(world, result);
     }
 
     public static void schedule(World world, LongHashSet chunks) {
@@ -342,6 +346,9 @@ public class LightingService extends AsyncTask {
                 if (tasks.isEmpty()) {
                     break; // Stop processing.
                 }
+            }
+            if (fixThread.isStopRequested()) {
+                return;
             }
         }
 

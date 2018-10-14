@@ -1,6 +1,5 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
-import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
@@ -8,8 +7,6 @@ import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;
-
-import java.util.Collection;
 
 /**
  * Contains all the chunk coordinates that have to be fixed,
@@ -27,22 +24,9 @@ public class LightingTaskBatch implements LightingTask {
     private boolean done = false;
     private boolean aborted = false;
 
-    @Deprecated
-    public LightingTaskBatch(World world, Collection<IntVector2> chunkCoordinates) {
-        this(world, getCoords(chunkCoordinates));
-    }
-
     public LightingTaskBatch(World world, LongHashSet chunkCoordinates) {
         this.world = world;
         this.chunksCoords = chunkCoordinates;
-    }
-
-    private static LongHashSet getCoords(Collection<IntVector2> chunkCoordinates) {
-        LongHashSet result = new LongHashSet(chunkCoordinates.size());
-        for (IntVector2 coord : chunkCoordinates) {
-            result.add(coord.x, coord.z);
-        }
-        return result;
     }
 
     @Override

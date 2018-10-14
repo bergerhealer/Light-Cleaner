@@ -162,8 +162,14 @@ public class LightCleaner extends PluginBase {
                     Player p = (Player) sender;
                     int radius = Bukkit.getServer().getViewDistance();
                     if (args.length >= 1) {
-                        Permission.CLEAN_AREA.handle(sender);
-                        radius = ParseUtil.parseInt(args[0], radius);
+                        int new_radius = ParseUtil.parseInt(args[0], radius);
+                        if (new_radius > radius && !Permission.CLEAN_AREA.has(sender)) {
+                            int n = (radius * 2 + 1);
+                            sender.sendMessage(ChatColor.RED + "You do not have permission to clean areas larger than " +
+                                n + " x " + n);
+                            return true;
+                        }
+                        radius = new_radius;
                     }
                     Location l = p.getLocation();
                     LightingService.scheduleArea(p.getWorld(), l.getBlockX() >> 4, l.getBlockZ() >> 4, radius);
