@@ -31,6 +31,7 @@ public class LightingService extends AsyncTask {
     private static int taskCounter = 0;
     private static boolean pendingFileInUse = false;
     private static LightingTask currentTask;
+    private static boolean paused = false;
 
     /**
      * Gets whether this service is currently processing something
@@ -68,6 +69,26 @@ public class LightingService extends AsyncTask {
             AsyncTask.stop(fixThread);
             tickTask = null;
             fixThread = null;
+        }
+    }
+
+    /**
+     * Gets whether execution is paused, and pending tasks are not being processed
+     * 
+     * @return True if paused
+     */
+    public static boolean isPaused() {
+        return paused;
+    }
+
+    /**
+     * Sets whether execution is paused.
+     * 
+     * @param pause state to set to
+     */
+    public static void setPaused(boolean pause) {
+        if (paused != pause) {
+            paused = pause;
         }
     }
 
@@ -259,6 +280,13 @@ public class LightingService extends AsyncTask {
         synchronized (tasks) {
             tasks.clear();
         }
+        final LightingTask current = currentTask;
+        if (current != null) {
+            current.abort();
+        }
+        synchronized (tasks) {
+            tasks.clear();
+        }
         taskChunkCount = 0;
     }
 
@@ -284,7 +312,7 @@ public class LightingService extends AsyncTask {
         synchronized (tasks) {
             if (!tasks.isEmpty()) {
                 LightCleaner.plugin.log(Level.INFO, "Writing the pending lighting tasks (" + tasks.size() + ") to file to continue later...");
-                LightCleaner.plugin.log(Level.INFO, "Want to abort all operations? Delete the 'PendingLighting.dat' file from the plugins/NoLagg folder");
+                LightCleaner.plugin.log(Level.INFO, "Want to abort all operations? Delete the 'PendingLighting.dat' file from the plugins/LightCleaner folder");
             }
             savePendingBatches();
             clearTasks();
@@ -303,6 +331,20 @@ public class LightingService extends AsyncTask {
 
     @Override
     public void run() {
+        // While paused, do nothing
+        while (paused) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            synchronized (tasks) {
+                if (tasks.isEmpty()) {
+                    break; // Stop processing.
+                }
+            }
+        }
+
         synchronized (tasks) {
             currentTask = tasks.poll();
         }

@@ -25,6 +25,7 @@ public class LightingTaskBatch implements LightingTask {
     private final Object waitObject = new Object();
     private Runnable activeTask = null;
     private boolean done = false;
+    private boolean aborted = false;
 
     @Deprecated
     public LightingTaskBatch(World world, Collection<IntVector2> chunkCoordinates) {
@@ -81,16 +82,20 @@ public class LightingTaskBatch implements LightingTask {
     @Override
     public void process() {
         // Initialize lighting chunks
+        LightingChunk[] chunks_new = new LightingChunk[this.chunksCoords.size()];
         this.done = false;
-        this.chunks = new LightingChunk[this.chunksCoords.size()];
         int chunkIdx = 0;
         LongIterator coordIter = this.chunksCoords.longIterator();
         while (coordIter.hasNext()) {
             long longCoord = coordIter.next();
             int x = MathUtil.longHashMsw(longCoord);
             int z = MathUtil.longHashLsw(longCoord);
-            this.chunks[chunkIdx++] = new LightingChunk(x, z);
+            chunks_new[chunkIdx++] = new LightingChunk(x, z);
+            if (this.aborted) {
+                return;
+            }
         }
+        this.chunks = chunks_new;
 
         // Accessibility
         // Load the chunk with data
@@ -103,13 +108,28 @@ public class LightingTaskBatch implements LightingTask {
         // Load
         startLoading();
         waitForCompletion();
+        if (this.aborted) {
+            return;
+        }
         // Fix
         fix();
+        if (this.aborted) {
+            return;
+        }
         // Apply
         startApplying();
         waitForCompletion();
+        if (this.aborted) {
+            return;
+        }
         this.done = true;
         this.chunks = null;
+    }
+
+    @Override
+    public void abort() {
+        this.aborted = true;
+        LightingTaskBatch.this.completed();
     }
 
     /**
@@ -225,6 +245,9 @@ public class LightingTaskBatch implements LightingTask {
         // Initialize light
         for (LightingChunk chunk : chunks) {
             chunk.initLight();
+            if (this.aborted) {
+                return;
+            }
         }
 
         // Spread (timed, for debug)
@@ -238,7 +261,7 @@ public class LightingTaskBatch implements LightingTask {
                 totalLoops += count;
                 hasFaults |= count > 0;
             }
-        } while (hasFaults);
+        } while (hasFaults && !this.aborted);
         this.completed();
 
         long duration = System.currentTimeMillis() - startTime;

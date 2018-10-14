@@ -37,6 +37,11 @@ public interface LightingTask {
     void process();
 
     /**
+     * Orders this task to abort
+     */
+    void abort();
+
+    /**
      * Called from a synchronized task, ticking this task every tick
      */
     void syncTick();

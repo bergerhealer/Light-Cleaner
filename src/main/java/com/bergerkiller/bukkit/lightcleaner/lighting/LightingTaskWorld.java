@@ -25,11 +25,13 @@ public class LightingTaskWorld implements LightingTask {
     private final LongHashSet loadedChunks;
     private final LongHashSet chunks;
     private int chunkCount;
+    private boolean aborted;
 
     public LightingTaskWorld(World world, File regionFolder) {
         this.world = world;
         this.regionFolder = regionFolder;
         this.regions = new LongHashMap<WorldRegion>();
+        this.aborted = false;
 
         // Obtain the region file names
         Set<File> addedRegionFiles = new HashSet<File>();
@@ -107,6 +109,11 @@ public class LightingTaskWorld implements LightingTask {
 
     @Override
     public void process() {
+        // Stop
+        if (this.aborted) {
+            return;
+        }
+
         // Start loading all regions and all chunks contained in these regions
         int dx, dz;
         Object regionFile;
@@ -120,7 +127,7 @@ public class LightingTaskWorld implements LightingTask {
                 try {
                     DataInputStream stream = new DataInputStream(new FileInputStream(region.file));
                     try {
-                        for (int coordIndex = 0; coordIndex < 1024; coordIndex++) {
+                        for (int coordIndex = 0; coordIndex < 1024 && !this.aborted; coordIndex++) {
                             if (stream.readInt() > 0) {
                                 // Convert coordinate to dx/dz
                                 // coordIndex = dx + (dz << 5)
@@ -139,7 +146,7 @@ public class LightingTaskWorld implements LightingTask {
                 }
             } else {
                 // Obtain all generated chunks in this region file
-                for (dx = 0; dx < 32; dx++) {
+                for (dx = 0; dx < 32 && !this.aborted; dx++) {
                     for (dz = 0; dz < 32; dz++) {
                         if (NMSRegionFile.exists.invoke(regionFile, dx, dz)) {
                             // Region file exists - add it
@@ -151,6 +158,11 @@ public class LightingTaskWorld implements LightingTask {
             }
             // Update chunk count to subtract the missing chunks
             chunkCount -= ASSUMED_CHUNKS_PER_REGION - regionChunkCount;
+
+            // Abort handling
+            if (this.aborted) {
+                return;
+            }
         }
 
         // Now, for all loaded chunks remaining, add the region files they are in
@@ -174,6 +186,11 @@ public class LightingTaskWorld implements LightingTask {
             }
         }
 
+        // Abort handling
+        if (this.aborted) {
+            return;
+        }
+
         // We now know of all the regions to be processed, convert all of them into tasks
         // Use a slightly larger area to avoid cross-region errors
         for (WorldRegion region : regions.getValues()) {
@@ -186,10 +203,21 @@ public class LightingTaskWorld implements LightingTask {
                     }
                 }
             }
+
             // Reduce count, schedule and clear the buffer
             this.chunkCount -= buffer.size();
             LightingService.schedule(world, buffer);
+
+            // Abort handling
+            if (this.aborted) {
+                return;
+            }
         }
+    }
+
+    @Override
+    public void abort() {
+        this.aborted = true;
     }
 
     private static class WorldRegion {

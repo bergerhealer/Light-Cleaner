@@ -117,16 +117,40 @@ public class LightCleaner extends PluginBase {
                 Permission.ABORT.handle(sender);
                 if (LightingService.isProcessing()) {
                     LightingService.clearTasks();
-                    sender.sendMessage(ChatColor.GREEN + "All pending tasks cleared, will finish current " + LightingService.getChunkFaults() + " chunks now...");
+                    sender.sendMessage(ChatColor.GREEN + "All pending tasks cleared.");
                 } else {
                     sender.sendMessage(ChatColor.YELLOW + "No lighting was being processed; there was nothing to abort.");
                 }
+            } else if (subCmd.equalsIgnoreCase("pause")) {
+                // cleanlight pause
+                Permission.PAUSE.handle(sender);
+                LightingService.setPaused(true);
+                sender.sendMessage(ChatColor.YELLOW + "Light cleaning " + ChatColor.RED + "paused");
+                if (LightingService.isProcessing()) {
+                    sender.sendMessage(ChatColor.RED.toString() + LightingService.getChunkFaults() + ChatColor.YELLOW + " chunks are pending");
+                }
+
+            } else if (subCmd.equalsIgnoreCase("resume")) {
+                // cleanlight resume
+                Permission.PAUSE.handle(sender);
+                LightingService.setPaused(false);
+                sender.sendMessage(ChatColor.YELLOW + "Light cleaning " + ChatColor.GREEN + "resumed");
+                if (LightingService.isProcessing()) {
+                    sender.sendMessage(ChatColor.RED.toString() + LightingService.getChunkFaults() + ChatColor.YELLOW + " chunks will now be processed");
+                }
+
             } else if (subCmd.equalsIgnoreCase("status")) {
                 // cleanlight status
                 Permission.STATUS.handle(sender);
                 if (LightingService.isProcessing()) {
-                    sender.sendMessage(ChatColor.YELLOW + "Lighting is being cleaned, " + ChatColor.RED + LightingService.getChunkFaults() +
-                            " " + ChatColor.YELLOW + "chunks remaining");
+                    if (LightingService.isPaused()) {
+                        sender.sendMessage(ChatColor.YELLOW + "Light cleaning is currently paused, " + ChatColor.RED + LightingService.getChunkFaults() +
+                                " " + ChatColor.YELLOW + "chunks remaining");
+                        sender.sendMessage(ChatColor.YELLOW + "To start processing these chunks, use /cleanlight resume");
+                    } else {
+                        sender.sendMessage(ChatColor.YELLOW + "Lighting is being cleaned, " + ChatColor.RED + LightingService.getChunkFaults() +
+                                " " + ChatColor.YELLOW + "chunks remaining");
+                    }
                 } else {
                     sender.sendMessage(ChatColor.GREEN + "No lighting is being processed at this time.");
                 }
