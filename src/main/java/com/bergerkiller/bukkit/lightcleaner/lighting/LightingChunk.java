@@ -94,7 +94,7 @@ public class LightingChunk {
             heightmap.initialize();
             for (int x = 0; x < 16; ++x) {
                 for (int z = 0; z < 16; ++z) {
-                    this.heightmap[this.getHeightKey(x, z)] = heightmap.getHeight(x, z);
+                    this.heightmap[this.getHeightKey(x, z)] = Math.max(0, heightmap.getHeight(x, z));
                 }
             }
         } else {
@@ -125,7 +125,7 @@ public class LightingChunk {
      * @return height
      */
     public int getHeight(int x, int z) {
-        return heightmap[getHeightKey(x, z)] & 0xff;
+        return this.heightmap[getHeightKey(x, z)];
     }
 
     /**
