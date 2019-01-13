@@ -20,6 +20,7 @@ public class LightCleaner extends PluginBase {
     public static LightCleaner plugin;
     public static long minFreeMemory = 100 * 1024 * 1024;
     public static boolean autoCleanEnabled = false;
+    public static boolean loadChunksAsync = true;
 
     @Override
     public int getMinimumLibVersion() {
@@ -59,6 +60,10 @@ public class LightCleaner extends PluginBase {
         config.setHeader("autoCleanEnabled", "\nSets whether lighting is cleaned up for newly generated chunks");
         config.addHeader("autoCleanEnabled", "This will eliminate dark shadows during world generation");
         autoCleanEnabled = config.get("autoCleanEnabled", false);
+
+        config.setHeader("loadChunksAsync", "\nSets whether chunks to be processed are loaded asynchronously");
+        config.addHeader("loadChunksAsync", "Best to keep this on true to avoid tps drop, unless problems occur");
+        loadChunksAsync = config.get("loadChunksAsync", true);
 
         config.save();
 

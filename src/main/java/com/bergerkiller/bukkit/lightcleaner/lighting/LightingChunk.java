@@ -43,6 +43,7 @@ public class LightingChunk {
     public boolean isBlockLightDirty = true;
     public boolean isFilled = false;
     public boolean isApplied = false;
+    public boolean isChunkLoading = false;
     public IntVector2 start = new IntVector2(1, 1);
     public IntVector2 end = new IntVector2(14, 14);
 

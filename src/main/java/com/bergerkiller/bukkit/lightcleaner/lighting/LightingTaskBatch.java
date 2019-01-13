@@ -1,9 +1,14 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
+import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
+import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;
@@ -16,6 +21,7 @@ import org.bukkit.World;
 public class LightingTaskBatch implements LightingTask {
     public static final int MAX_PROCESSING_TICK_TIME = 30; // max ms per tick processing
     private static boolean DEBUG_LOG = false; // logs performance stats
+    private static boolean DEBUG_LOGGED_SYNC_LOAD = false; // log about sync load when async is expected
     public final World world;
     private LightingChunk[] chunks = null;
     private final LongHashSet chunksCoords;
@@ -181,22 +187,58 @@ public class LightingTaskBatch implements LightingTask {
         activeTask = new Runnable() {
             @Override
             public void run() {
-                boolean loaded = false;
                 long startTime = System.currentTimeMillis();
+
                 // Load chunks
-                for (LightingChunk lc : LightingTaskBatch.this.chunks) {
+                boolean isFullyLoaded = true;
+                for (final LightingChunk lc : LightingTaskBatch.this.chunks) {
                     if (lc.isFilled) {
                         continue;
                     }
-                    loaded = true;
-                    lc.fill(world.getChunkAt(lc.chunkX, lc.chunkZ));
+
+                    isFullyLoaded = false;
+
+                    if (lc.isChunkLoading) {
+                        continue;
+                    }
+
+                    // This is for debug: detect whether we are truly loading a chunk asynchronously
+                    // When the callback is called during getChunkAsync(), then something might be wrong!
+                    final AtomicBoolean isQueueingLoad = new AtomicBoolean(false);
+
+                    // This task is run once the chunk is loaded (or right away when sync)
+                    Runnable fillChunkTask = new Runnable() {
+                        @Override
+                        public void run() {
+                            lc.isChunkLoading = false;
+                            lc.fill(world.getChunkAt(lc.chunkX, lc.chunkZ));
+                            if (!DEBUG_LOGGED_SYNC_LOAD && isQueueingLoad.get()) {
+                                DEBUG_LOGGED_SYNC_LOAD = true;
+                                LightCleaner.plugin.getLogger().log(Level.WARNING, "Chunk was loaded sync instead of async, this might impact TPS negatively");
+                                LightCleaner.plugin.getLogger().log(Level.WARNING, "Stack trace of callback", new IllegalStateException());
+                            }
+                        }
+                    };
+
+                    // Load the chunk sync or async
+                    lc.isChunkLoading = true;
+                    if (LightCleaner.loadChunksAsync && !world.isChunkLoaded(lc.chunkX, lc.chunkZ)) {
+                        isQueueingLoad.set(true);
+                        WorldUtil.getChunkAsync(world, lc.chunkX, lc.chunkZ, fillChunkTask);
+                        isQueueingLoad.set(false);
+                    } else {
+                        // Already loaded, run right away!
+                        fillChunkTask.run();
+                    }
+
                     // Too long?
                     if ((System.currentTimeMillis() - startTime) > MAX_PROCESSING_TICK_TIME) {
                         break;
                     }
                 }
+
                 // Nothing loaded, all is done?
-                if (!loaded) {
+                if (isFullyLoaded) {
                     LightingTaskBatch.this.completed();
                 }
             }
