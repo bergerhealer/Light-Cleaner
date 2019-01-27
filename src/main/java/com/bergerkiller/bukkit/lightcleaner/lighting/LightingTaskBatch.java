@@ -1,6 +1,5 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
-import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
@@ -29,10 +28,20 @@ public class LightingTaskBatch implements LightingTask {
     private Runnable activeTask = null;
     private boolean done = false;
     private boolean aborted = false;
+    private boolean debugMakeCorrupted = false;
 
     public LightingTaskBatch(World world, LongHashSet chunkCoordinates) {
         this.world = world;
         this.chunksCoords = chunkCoordinates;
+    }
+
+    /**
+     * For debugging: skips the spreading phase of the cleaning process, causing
+     * bugged lighting to be left behind. This bugged lighting should be fixed by
+     * the plugin after.
+     */
+    public void debugMakeCorrupted() {
+        this.debugMakeCorrupted = true;
     }
 
     @Override
@@ -303,6 +312,12 @@ public class LightingTaskBatch implements LightingTask {
             if (this.aborted) {
                 return;
             }
+        }
+
+        // Skip spread phase when debug mode is active
+        if (this.debugMakeCorrupted) {
+            this.completed();
+            return;
         }
 
         // Spread (timed, for debug)

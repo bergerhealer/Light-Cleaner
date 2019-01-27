@@ -122,7 +122,10 @@ public class LightingService extends AsyncTask {
     }
 
     public static void scheduleWorld(final World world) {
-        schedule(new LightingTaskWorld(world));
+        ScheduleArguments args = new ScheduleArguments();
+        args.setWorld(world);
+        args.setEntireWorld();
+        schedule(args);
     }
 
     /**
@@ -134,53 +137,68 @@ public class LightingService extends AsyncTask {
      * @param radius
      */
     public static void scheduleArea(World world, int middleX, int middleZ, int radius) {
-        LongHashSet chunks = new LongHashSet((2*radius)*(2*radius));
-        for (int a = -radius; a <= radius; a++) {
-            for (int b = -radius; b <= radius; b++) {
-                int cx = middleX + a;
-                int cz = middleZ + b;
-                chunks.add(cx, cz);
-            }
-        }
-        schedule(world, chunks);
+        ScheduleArguments args = new ScheduleArguments();
+        args.setWorld(world);
+        args.setChunksAround(middleX, middleZ, radius);
+        schedule(args);
     }
 
     @Deprecated
     public static void schedule(World world, Collection<IntVector2> chunks) {
-        LongHashSet result = new LongHashSet(chunks.size());
-        for (IntVector2 coord : chunks) {
-            result.add(coord.x, coord.z);
-        }
-        schedule(world, result);
+        ScheduleArguments args = new ScheduleArguments();
+        args.setWorld(world);
+        args.setChunks(chunks);
+        schedule(args);
     }
 
     public static void schedule(World world, LongHashSet chunks) {
+        ScheduleArguments args = new ScheduleArguments();
+        args.setWorld(world);
+        args.setChunks(chunks);
+        schedule(args);
+    }
+
+    public static void schedule(ScheduleArguments args) {
+        // World not allowed to be null
+        if (args.world == null) {
+            throw new IllegalArgumentException("Schedule arguments 'world' is null");
+        }
+
+        // If no chunks specified, entire world
+        if (args.chunks == null) {
+            schedule(new LightingTaskWorld(args.world));
+        }
+
         // If less than 34x34 chunks are requested, schedule as one task
         // In that case, be sure to only schedule chunks that actually exist
         // This prevents generating new chunks as part of this command
-        if (chunks.size() <= (34*34)) {
+        if (args.chunks.size() <= (34*34)) {
 
             // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
             // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
-            LongHashSet chunks_filtered = new LongHashSet(chunks.size());
-            LongIterator iter = chunks.longIterator();
+            LongHashSet chunks_filtered = new LongHashSet(args.chunks.size());
+            LongIterator iter = args.chunks.longIterator();
             while (iter.hasNext()) {
                 long chunk = iter.next();
                 int cx = MathUtil.longHashMsw(chunk);
                 int cz = MathUtil.longHashLsw(chunk);
-                if (WorldUtil.isChunkAvailable(world, cx, cz)) {
+                if (WorldUtil.isChunkAvailable(args.world, cx, cz)) {
                     chunks_filtered.add(chunk);
                 }
             }
 
             // Schedule it
-            schedule(new LightingTaskBatch(world, chunks_filtered));
+            LightingTaskBatch task = new LightingTaskBatch(args.world, chunks_filtered);
+            if (args.debugMakeCorrupted) {
+                task.debugMakeCorrupted();
+            }
+            schedule(task);
             return;
         }
 
         // Too many chunks requested. Separate the operations per region file with small overlap.
-        RegionInfoMap regions = RegionInfoMap.create(world);
-        LongIterator iter = chunks.longIterator();
+        RegionInfoMap regions = RegionInfoMap.create(args.world);
+        LongIterator iter = args.chunks.longIterator();
         LongHashSet scheduledRegions = new LongHashSet();
         while (iter.hasNext()) {
             long first_chunk = iter.next();
@@ -203,7 +221,7 @@ public class LightingService extends AsyncTask {
                     int cx = region.cx + dx;
                     int cz = region.cz + dz;
                     long chunk_key = MathUtil.longHashToLong(cx, cz);
-                    if (!chunks.contains(chunk_key)) {
+                    if (!args.chunks.contains(chunk_key)) {
                         continue;
                     }
                     if (dx >= 0 && dz >= 0 && dx < 32 && dz < 32) {
@@ -221,7 +239,11 @@ public class LightingService extends AsyncTask {
 
             // Schedule the region
             scheduledRegions.add(region.rx, region.rz);
-            schedule(new LightingTaskBatch(world, buffer));
+            LightingTaskBatch task = new LightingTaskBatch(args.world, buffer);
+            if (args.debugMakeCorrupted) {
+                task.debugMakeCorrupted();
+            }
+            schedule(task);
         }
     }
 
@@ -512,6 +534,57 @@ public class LightingService extends AsyncTask {
                     sleep(1000);
                 }
             }
+        }
+    }
+
+    public static class ScheduleArguments {
+        private World world;
+        private LongHashSet chunks;
+        private boolean debugMakeCorrupted = false;
+
+        public ScheduleArguments setWorld(World world) {
+            this.world = world;
+            return this;
+        }
+
+        public ScheduleArguments setEntireWorld() {
+            this.chunks = null;
+            return this;
+        }
+
+        public ScheduleArguments setDebugMakeCorrupted(boolean debug) {
+            this.debugMakeCorrupted = debug;
+            return this;
+        }
+
+        public ScheduleArguments setChunksAround(Location location, int radius) {
+            this.setWorld(location.getWorld());
+            return this.setChunksAround(location.getBlockX()>>4, location.getBlockZ()>>4, radius);
+        }
+
+        public ScheduleArguments setChunksAround(int middleX, int middleZ, int radius) {
+            this.chunks = new LongHashSet((2*radius)*(2*radius));
+            for (int a = -radius; a <= radius; a++) {
+                for (int b = -radius; b <= radius; b++) {
+                    int cx = middleX + a;
+                    int cz = middleZ + b;
+                    this.chunks.add(cx, cz);
+                }
+            }
+            return this;
+        }
+
+        public ScheduleArguments setChunks(Collection<IntVector2> chunks) {
+            this.chunks = new LongHashSet(chunks.size());
+            for (IntVector2 coord : chunks) {
+                this.chunks.add(coord.x, coord.z);
+            }
+            return this;
+        }
+
+        public ScheduleArguments setChunks(LongHashSet chunks) {
+            this.chunks = chunks;
+            return this;
         }
     }
 }

@@ -149,6 +149,34 @@ public class LightCleaner extends PluginBase {
                 } else {
                     sender.sendMessage(ChatColor.GREEN + "No lighting is being processed at this time.");
                 }
+            } else if (args.length > 0 && args[0].equalsIgnoreCase("dirty")) {
+                // cleanlight dirty
+                Permission.DIRTY_DEBUG.handle(sender);
+
+                if (sender instanceof Player) {
+                    Player p = (Player) sender;
+                    int radius = Bukkit.getServer().getViewDistance();
+                    if (args.length >= 2) {
+                        int new_radius = ParseUtil.parseInt(args[1], radius);
+                        if (new_radius > radius && !Permission.CLEAN_AREA.has(sender)) {
+                            int n = (radius * 2 + 1);
+                            sender.sendMessage(ChatColor.RED + "You do not have permission to clean areas larger than " +
+                                n + " x " + n);
+                            return true;
+                        }
+                        radius = new_radius;
+                    }
+
+                    LightingService.ScheduleArguments scheduleArgs = new LightingService.ScheduleArguments();
+                    scheduleArgs.setChunksAround(p.getLocation(), radius);
+                    scheduleArgs.setDebugMakeCorrupted(true);
+                    LightingService.schedule(scheduleArgs);
+
+                    p.sendMessage(ChatColor.GREEN + "A " + (radius * 2 + 1) + " X " + (radius * 2 + 1) + " chunk area around you is currently being corrupted, introducing lighting issues...");
+                    LightingService.addRecipient(sender);
+                } else {
+                    sender.sendMessage("This command is only available to players");
+                }
             } else if (args.length == 0 || ParseUtil.isNumeric(args[0])) {
                 // cleanlight
                 Permission.CLEAN.handle(sender);
@@ -166,8 +194,11 @@ public class LightCleaner extends PluginBase {
                         }
                         radius = new_radius;
                     }
-                    Location l = p.getLocation();
-                    LightingService.scheduleArea(p.getWorld(), l.getBlockX() >> 4, l.getBlockZ() >> 4, radius);
+
+                    LightingService.ScheduleArguments scheduleArgs = new LightingService.ScheduleArguments();
+                    scheduleArgs.setChunksAround(p.getLocation(), radius);
+                    LightingService.schedule(scheduleArgs);
+
                     p.sendMessage(ChatColor.GREEN + "A " + (radius * 2 + 1) + " X " + (radius * 2 + 1) + " chunk area around you is currently being fixed from lighting issues...");
                     LightingService.addRecipient(sender);
                 } else {
