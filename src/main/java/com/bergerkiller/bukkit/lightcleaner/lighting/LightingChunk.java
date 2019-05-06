@@ -16,8 +16,10 @@ import com.bergerkiller.mountiplex.reflection.SafeMethod;
 import com.bergerkiller.mountiplex.reflection.declarations.Template;
 
 import org.bukkit.Chunk;
+import org.bukkit.World;
 
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.logging.Level;
 
 /**
@@ -37,6 +39,7 @@ public class LightingChunk {
     public final LightingChunkSection[] sections = new LightingChunkSection[SECTION_COUNT];
     public final LightingChunkNeighboring neighbors = new LightingChunkNeighboring();
     public final int[] heightmap = new int[256];
+    public final World world;
     public final int chunkX, chunkZ;
     public boolean hasSkyLight = true;
     public boolean isSkyLightDirty = true;
@@ -47,7 +50,8 @@ public class LightingChunk {
     public IntVector2 start = new IntVector2(1, 1);
     public IntVector2 end = new IntVector2(14, 14);
 
-    public LightingChunk(int x, int z) {
+    public LightingChunk(World world, int x, int z) {
+        this.world = world;
         this.chunkX = x;
         this.chunkZ = z;
     }
@@ -85,19 +89,47 @@ public class LightingChunk {
         for (int section = 0; section < SECTION_COUNT; section++) {
             ChunkSection chunkSection = chunkSections[section];
             if (chunkSection != null) {
-                sections[section] = new LightingChunkSection(chunk.getWorld(), this, chunkSection, hasSkyLight);
+                sections[section] = new LightingChunkSection(this, chunkSection, hasSkyLight);
             }
         }
 
         // Initialize and then load sky light heightmap information
         if (this.hasSkyLight) {
+            ChunkUtil.initializeHeightMap(chunk, EnumSet.of(HeightMap.Type.LIGHT_BLOCKING));
+
+            // Compute the heightmap ourselves. Since MC 1.14 the initialization above is meaningless.
+            {
+                ChunkHandle chunkHandle = ChunkHandle.fromBukkit(chunk);
+                World world = chunkHandle.getBukkitChunk().getWorld();
+                int baseX = chunkHandle.getLocX() << 4;
+                int baseZ = chunkHandle.getLocZ() << 4;
+                int highestY = chunkHandle.getTopSliceY();
+                int heightKey = 0;
+                for (int z = 0; z < 16; ++z) {
+                    for (int x = 0; x < 16; ++x) {
+                        int y = highestY + 16;
+                        while (y > 0) {
+                            if (chunkHandle.getBlockDataAtCoord(x, y - 1, z).getOpacity(world, baseX+x, y, baseZ+z) == 0) {
+                                --y;
+                                continue;
+                            }
+                            --y;
+                            break;
+                        }
+                        this.heightmap[heightKey++] = y;
+                    }
+                }
+            }
+
+            // Old code. Breaks with MC 1.14.
+            /*
             HeightMap heightmap = ChunkUtil.getHeightMap(chunk, HeightMap.Type.LIGHT_BLOCKING);
-            heightmap.initialize();
             for (int x = 0; x < 16; ++x) {
                 for (int z = 0; z < 16; ++z) {
                     this.heightmap[this.getHeightKey(x, z)] = Math.max(0, heightmap.getHeight(x, z));
                 }
             }
+            */
         } else {
             Arrays.fill(this.heightmap, ChunkHandle.fromBukkit(chunk).getTopSliceY() + 15);
         }

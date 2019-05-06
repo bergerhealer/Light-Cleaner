@@ -1,17 +1,14 @@
 package com.bergerkiller.bukkit.lightcleaner.util;
 
-import java.io.File;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Set;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;
 
-import com.bergerkiller.bukkit.common.utils.MathUtil;
+import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashMap;
-import com.bergerkiller.reflection.net.minecraft.server.NMSRegionFileCache;
 
 /**
  * A map of region information
@@ -62,66 +59,23 @@ public class RegionInfoMap {
     public static RegionInfoMap create(World world) {
         LongHashMap<RegionInfo> regions = new LongHashMap<RegionInfo>();
 
-        // Obtain the region file names
-        Set<File> regionFiles = new HashSet<File>();
-        File regionFolder = WorldUtil.getWorldRegionFolder(world.getName());
-        if (regionFolder != null) {
-            String[] regionFileNames = regionFolder.list();
-            for (String regionFileName : regionFileNames) {
-                File file = new File(regionFolder, regionFileName);
-                if (file.isFile() && file.exists() && file.length() >= 4096) {
-                    regionFiles.add(file);
-                }
-            }
+        // Obtain the region coordinates
+        Set<IntVector2> regionCoordinates = WorldUtil.getWorldRegions(world);
+
+        // For each region, create a RegionInfo entry
+        for (IntVector2 region : regionCoordinates) {
+            regions.put(region.x, region.z, new RegionInfo(world, region.x, region.z));
         }
 
-        // Detect any addition Region Files in the cache that are not yet saved
-        // Synchronized, since we are going to iterate the files here...unsafe not to do so!
-        synchronized (NMSRegionFileCache.T.getType()) {
-            regionFiles.addAll(NMSRegionFileCache.FILES.keySet());
-        }
-
-        // Go by all found region files and parse the filename to deduce the region coordinates
-        for (File regionFile : regionFiles) {
-            String regionFileName = regionFile.getName();
-
-            // Parse r.0.0.mca
-            // Step one: verify starts with r. and ends with .mca
-            if (!regionFileName.startsWith("r.") || !regionFileName.endsWith(".mca")) {
-                continue;
+        // For all loaded chunks, add those chunks to their region up-front
+        // They may not yet have been saved to the region file
+        for (Chunk chunk : world.getLoadedChunks()) {
+            int rx = WorldUtil.chunkToRegionIndex(chunk.getX());
+            int rz = WorldUtil.chunkToRegionIndex(chunk.getZ());
+            RegionInfo info = regions.get(rx, rz);
+            if (info != null) {
+                info.addChunk(chunk.getX(), chunk.getZ());
             }
-
-            // Find dot between coordinates
-            int coord_sep_idx = regionFileName.indexOf('.', 2);
-            if (coord_sep_idx == -1 || coord_sep_idx >= regionFileName.length() - 4) {
-                continue;
-            }
-
-            // Parse the two numbers as integers - should succeed
-            try {
-                int rx = Integer.parseInt(regionFileName.substring(2, coord_sep_idx));
-                int rz = Integer.parseInt(regionFileName.substring(coord_sep_idx + 1, regionFileName.length() - 4));
-                long key = MathUtil.longHashToLong(rx, rz);
-                if (!regions.contains(key)) {
-                    regions.put(key, new RegionInfo(world, regionFile, rx, rz));
-                }
-            } catch (Exception ex) {
-            }
-        }
-
-        // Go by all loaded chunks, and add the regions they are in as well
-        // This may happen (?) when a chunk was recently generated but not yet saved to disk
-        // The RegionFileCache should catch those, but you never know...
-        for (Chunk chunk : WorldUtil.getChunks(world)) {
-            int rx = chunk.getX() >> 5;
-            int rz = chunk.getZ() >> 5;
-            long key = MathUtil.longHashToLong(rx, rz);
-            RegionInfo info = regions.get(key);
-            if (info == null) {
-                info = new RegionInfo(world, null, rx, rz);
-                regions.put(key, info);
-            }
-            info.addChunk(chunk.getX(), chunk.getZ());
         }
 
         return new RegionInfoMap(world, regions);

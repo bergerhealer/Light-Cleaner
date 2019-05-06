@@ -21,6 +21,7 @@ public class LightCleaner extends PluginBase {
     public static long minFreeMemory = 100 * 1024 * 1024;
     public static boolean autoCleanEnabled = false;
     public static boolean loadChunksAsync = true;
+    public static int asyncLoadConcurrency = 50;
 
     @Override
     public int getMinimumLibVersion() {
@@ -64,6 +65,11 @@ public class LightCleaner extends PluginBase {
         config.setHeader("loadChunksAsync", "\nSets whether chunks to be processed are loaded asynchronously");
         config.addHeader("loadChunksAsync", "Best to keep this on true to avoid tps drop, unless problems occur");
         loadChunksAsync = config.get("loadChunksAsync", true);
+
+        config.setHeader("asyncLoadConcurrency", "\nHow many chunks are asynchronously loaded at the same time");
+        config.addHeader("asyncLoadConcurrency", "Only used loadChunksAsync is true. Setting this value too high");
+        config.addHeader("asyncLoadConcurrency", "may overflow the internal queues. Too low and it will idle too much.");
+        asyncLoadConcurrency = config.get("asyncLoadConcurrency", 50);
 
         config.save();
 

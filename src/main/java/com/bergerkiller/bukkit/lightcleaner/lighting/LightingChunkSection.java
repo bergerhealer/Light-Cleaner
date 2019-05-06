@@ -1,7 +1,6 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
-import org.bukkit.World;
-
+import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
@@ -12,15 +11,24 @@ public class LightingChunkSection {
     public final NibbleArrayHandle blockLight;
     public final NibbleArrayHandle opacity;
 
-    public LightingChunkSection(World world, LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
+    public LightingChunkSection(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
         this.owner = owner;
 
         // Block light data
-        this.blockLight = NibbleArrayHandle.createNew(chunkSection.getBlockLightData());
+        byte[] blockLightData = WorldUtil.getSectionBlockLight(owner.world,
+                owner.chunkX, chunkSection.getY(), owner.chunkZ);
+        if (blockLightData != null) {
+            this.blockLight = NibbleArrayHandle.createNew(blockLightData);
+        } else {
+            this.blockLight = NibbleArrayHandle.createNew();
+        }
 
         // Sky light data
-        if (chunkSection.hasSkyLight()) {
-            this.skyLight = NibbleArrayHandle.createNew(chunkSection.getSkyLightData());
+        byte[] skyLightData = WorldUtil.getSectionSkyLight(owner.world,
+                owner.chunkX, chunkSection.getY(), owner.chunkZ);
+
+        if (skyLightData != null) {
+            this.skyLight = NibbleArrayHandle.createNew(skyLightData);
         } else if (hasSkyLight) {
             this.skyLight = NibbleArrayHandle.createNew();
         } else {
@@ -41,7 +49,7 @@ public class LightingChunkSection {
                 for (y = 0; y < 16; y++) {
                     info = chunkSection.getBlockData(x, y, z);
                     blockEmission = info.getEmission();
-                    opacity = info.getOpacity(world, worldX+x, worldY+y, worldZ+z);
+                    opacity = info.getOpacity(owner.world, worldX+x, worldY+y, worldZ+z);
                     if (opacity <= 0) {
                         opacity = 1;
                     } else if (opacity > 0xF) {
@@ -89,20 +97,52 @@ public class LightingChunkSection {
      */
     public boolean saveToChunk(ChunkSection chunkSection) {
         boolean changed = false;
-        if (isNibbleArrayDifferent(blockLight, chunkSection.getBlockLightNibbleArray())) {
-            chunkSection.setBlockLightNibbleArray(blockLight);
-            changed = true;
+
+        if (this.blockLight != null) {
+            byte[] newBlockLight = this.blockLight.getData();
+            byte[] oldBlockLight = WorldUtil.getSectionBlockLight(owner.world,
+                    owner.chunkX, chunkSection.getY(), owner.chunkZ);
+            boolean blockLightChanged = false;
+            if (oldBlockLight == null || newBlockLight.length != oldBlockLight.length) {
+                blockLightChanged = true;
+            } else {
+                for (int i = 0; i < oldBlockLight.length; i++) {
+                    if (oldBlockLight[i] != newBlockLight[i]) {
+                        blockLightChanged = true;
+                        break;
+                    }
+                }
+            }
+            if (blockLightChanged) {
+                WorldUtil.setSectionBlockLight(owner.world,
+                        owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                        newBlockLight);
+                changed = true;
+            }
         }
-        if (isNibbleArrayDifferent(skyLight, chunkSection.getSkyLightNibbleArray())) {
-            chunkSection.setSkyLightNibbleArray(skyLight);
-            changed = true;
+        if (this.skyLight != null) {
+            byte[] newSkyLight = this.skyLight.getData();
+            byte[] oldSkyLight = WorldUtil.getSectionSkyLight(owner.world,
+                    owner.chunkX, chunkSection.getY(), owner.chunkZ);
+            boolean skyLightChanged = false;
+            if (oldSkyLight == null || newSkyLight.length != oldSkyLight.length) {
+                skyLightChanged = true;
+            } else {
+                for (int i = 0; i < oldSkyLight.length; i++) {
+                    if (oldSkyLight[i] != newSkyLight[i]) {
+                        skyLightChanged = true;
+                        break;
+                    }
+                }
+            }
+            if (skyLightChanged) {
+                WorldUtil.setSectionSkyLight(owner.world,
+                        owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                        newSkyLight);
+                changed = true;
+            }
         }
         return changed;
     }
 
-    private static boolean isNibbleArrayDifferent(NibbleArrayHandle n1, NibbleArrayHandle n2) {
-        if (n1 == null) return false;
-        if (n2 == null) return true;
-        return !n1.dataEquals(n2);
-    }
 }

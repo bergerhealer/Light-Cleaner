@@ -6,8 +6,8 @@ import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;
@@ -20,7 +20,6 @@ import org.bukkit.World;
 public class LightingTaskBatch implements LightingTask {
     public static final int MAX_PROCESSING_TICK_TIME = 30; // max ms per tick processing
     private static boolean DEBUG_LOG = false; // logs performance stats
-    private static boolean DEBUG_LOGGED_SYNC_LOAD = false; // log about sync load when async is expected
     public final World world;
     private LightingChunk[] chunks = null;
     private final LongHashSet chunksCoords;
@@ -118,7 +117,7 @@ public class LightingTaskBatch implements LightingTask {
             long longCoord = coordIter.next();
             int x = MathUtil.longHashMsw(longCoord);
             int z = MathUtil.longHashLsw(longCoord);
-            chunks_new[chunkIdx++] = new LightingChunk(x, z);
+            chunks_new[chunkIdx++] = new LightingChunk(this.world, x, z);
             if (this.aborted) {
                 return;
             }
@@ -188,6 +187,8 @@ public class LightingTaskBatch implements LightingTask {
         }
     }
 
+    static int i = 0;
+    
     /**
      * Starts loads the chunks that are to be fixed into memory.
      * This is done in several ticks.
@@ -197,6 +198,14 @@ public class LightingTaskBatch implements LightingTask {
             @Override
             public void run() {
                 long startTime = System.currentTimeMillis();
+
+                // Get number of chunks currently being loaded
+                int numBeingLoaded = 0;
+                for (LightingChunk lc : LightingTaskBatch.this.chunks) {
+                    if (lc.isChunkLoading) {
+                        numBeingLoaded++;
+                    }
+                }
 
                 // Load chunks
                 boolean isFullyLoaded = true;
@@ -211,34 +220,33 @@ public class LightingTaskBatch implements LightingTask {
                         continue;
                     }
 
-                    // This is for debug: detect whether we are truly loading a chunk asynchronously
-                    // When the callback is called during getChunkAsync(), then something might be wrong!
-                    final AtomicBoolean isQueueingLoad = new AtomicBoolean(false);
-
-                    // This task is run once the chunk is loaded (or right away when sync)
-                    Runnable fillChunkTask = new Runnable() {
-                        @Override
-                        public void run() {
-                            lc.isChunkLoading = false;
-                            lc.fill(world.getChunkAt(lc.chunkX, lc.chunkZ));
-                            if (!DEBUG_LOGGED_SYNC_LOAD && isQueueingLoad.get()) {
-                                DEBUG_LOGGED_SYNC_LOAD = true;
-                                LightCleaner.plugin.getLogger().log(Level.WARNING, "Chunk was loaded sync instead of async, this might impact TPS negatively");
-                                LightCleaner.plugin.getLogger().log(Level.WARNING, "Stack trace of callback", new IllegalStateException());
-                            }
-                        }
-                    };
+                    if (numBeingLoaded >= LightCleaner.asyncLoadConcurrency) {
+                        break;
+                    }
 
                     // Load the chunk sync or async
                     lc.isChunkLoading = true;
-                    if (LightCleaner.loadChunksAsync && !world.isChunkLoaded(lc.chunkX, lc.chunkZ)) {
-                        isQueueingLoad.set(true);
-                        WorldUtil.getChunkAsync(world, lc.chunkX, lc.chunkZ, fillChunkTask);
-                        isQueueingLoad.set(false);
+                    CompletableFuture<Chunk> asyncLoad;
+                    if (LightCleaner.loadChunksAsync) {
+                        asyncLoad = WorldUtil.getChunkAsync(world, lc.chunkX, lc.chunkZ);
+                        if (!asyncLoad.isDone()) {
+                            numBeingLoaded++;
+                        }
                     } else {
-                        // Already loaded, run right away!
-                        fillChunkTask.run();
+                        asyncLoad = new CompletableFuture<Chunk>();
+                        asyncLoad.complete(world.getChunkAt(lc.chunkX, lc.chunkZ));
                     }
+
+                    // Once loaded, fill with the data from the chunk
+                    asyncLoad.thenAccept(new Consumer<Chunk>() {
+                        @Override
+                        public void accept(Chunk chunk) {
+                            lc.isChunkLoading = false;
+                            if (!LightingTaskBatch.this.aborted) {
+                                lc.fill(chunk);
+                            }
+                        }
+                    });
 
                     // Too long?
                     if ((System.currentTimeMillis() - startTime) > MAX_PROCESSING_TICK_TIME) {
@@ -280,13 +288,13 @@ public class LightingTaskBatch implements LightingTask {
                     // Save to chunk
                     if (lc.saveToChunk(bchunk)) {
                         // Chunk changed, we need to resend to players
-                        boolean isPlayerNear = WorldUtil.queueChunkSend(world, lc.chunkX, lc.chunkZ);
+                        boolean isPlayerNear = WorldUtil.queueChunkSendLight(world, lc.chunkX, lc.chunkZ);
                         if (!isPlayerNear) {
-                            world.unloadChunkRequest(lc.chunkX, lc.chunkZ, true);
+                            world.unloadChunkRequest(lc.chunkX, lc.chunkZ);
                         }
                     } else {
                         // No changes. Unload the chunk if no player is nearby.
-                        world.unloadChunkRequest(lc.chunkX, lc.chunkZ, true);
+                        world.unloadChunkRequest(lc.chunkX, lc.chunkZ);
                     }
 
                     // Too long?

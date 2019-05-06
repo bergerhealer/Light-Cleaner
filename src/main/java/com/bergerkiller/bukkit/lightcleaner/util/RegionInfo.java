@@ -1,15 +1,10 @@
 package com.bergerkiller.bukkit.lightcleaner.util;
 
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
 import java.util.BitSet;
 
 import org.bukkit.World;
 
-import com.bergerkiller.reflection.net.minecraft.server.NMSRegionFile;
-import com.bergerkiller.reflection.net.minecraft.server.NMSRegionFileCache;
+import com.bergerkiller.bukkit.common.utils.WorldUtil;
 
 /**
  * Loads region information, storing whether or not
@@ -19,17 +14,15 @@ public class RegionInfo {
     public final World world;
     public final int rx, rz;
     public final int cx, cz;
-    private final File _file;
     private final BitSet _chunks;
     private boolean _loadedFromDisk;
 
-    public RegionInfo(World world, File file, int rx, int rz) {
+    public RegionInfo(World world, int rx, int rz) {
         this.world = world;
         this.rx = rx;
         this.rz = rz;
         this.cx = (rx << 5);
         this.cz = (rz << 5);
-        this._file = file;
         this._chunks = new BitSet(1024);
         this._loadedFromDisk = false;
     }
@@ -50,11 +43,7 @@ public class RegionInfo {
      * @return chunk count
      */
     public int getChunkCount() {
-        if (this._chunks == null) {
-            return 32 * 32;
-        } else {
-            return this._chunks.cardinality();
-        }
+        return this._chunks.cardinality();
     }
 
     /**
@@ -63,40 +52,7 @@ public class RegionInfo {
     public void load() {
         if (!this._loadedFromDisk) {
             this._loadedFromDisk = true;
-
-            // From region files
-            if (this._file != null) {
-                Object regionFile;
-                if ((regionFile = NMSRegionFileCache.FILES.get(this._file)) == null) {
-                    // Start a new file stream to read the coordinates
-                    // Creating a new region file is too slow and results in memory leaks
-                    try {
-                        DataInputStream stream = new DataInputStream(new FileInputStream(this._file));
-                        try {
-                            for (int coordIndex = 0; coordIndex < 1024; coordIndex++) {
-                                if (stream.readInt() > 0) {
-                                    this._chunks.set(coordIndex);
-                                }
-                            }
-                        } finally {
-                            stream.close();
-                        }
-                    } catch (IOException ex) {
-                    }
-                } else {
-                    // Obtain all generated chunks in this region file
-                    int coordIndex = 0;
-                    int dx, dz;
-                    for (dz = 0; dz < 32; dz++) {
-                        for (dx = 0; dx < 32; dx++) {
-                            if (NMSRegionFile.exists.invoke(regionFile, dx, dz)) {
-                                this._chunks.set(coordIndex);
-                            }
-                            coordIndex++;
-                        }
-                    }
-                }
-            }
+            this._chunks.or(WorldUtil.getWorldSavedRegionChunks(this.world, this.rx, this.rz));
         }
     }
 

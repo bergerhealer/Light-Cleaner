@@ -14,7 +14,11 @@ public class NLLListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onChunkUnload(ChunkUnloadEvent event) {
         if (LightingService.isProcessing(event.getChunk())) {
-            event.setCancelled(true);
+            try {
+                event.setCancelled(true);
+            } catch (Throwable t) {
+                //TODO: Bukkit broken!
+            }
         }
     }
 

@@ -167,6 +167,7 @@ public class LightingService extends AsyncTask {
         // If no chunks specified, entire world
         if (args.chunks == null) {
             schedule(new LightingTaskWorld(args.world));
+            return;
         }
 
         // If less than 34x34 chunks are requested, schedule as one task
@@ -519,19 +520,22 @@ public class LightingService extends AsyncTask {
                 WorldUtil.saveToDisk(world);
             }
             runtime.gc();
-            final long freemb = runtime.freeMemory() >> 20;
-            if (runtime.freeMemory() >= LightCleaner.minFreeMemory) {
+            long free = runtime.freeMemory();
+            if (free >= LightCleaner.minFreeMemory) {
                 // Memory successfully reduced
-                LightCleaner.plugin.log(Level.WARNING, "All worlds saved. Free memory: " + freemb + "MB. Continueing...");
+                LightCleaner.plugin.log(Level.WARNING, "All worlds saved. Free memory: " + (free >> 20) + "MB. Continueing...");
             } else {
                 // WAIT! We are running out of juice here!
-                LightCleaner.plugin.log(Level.WARNING, "Almost running out of memory still (" + freemb + "MB) ...waiting for a bit");
-                sleep(10000);
-                runtime.gc();
+                LightCleaner.plugin.log(Level.WARNING, "Almost running out of memory still (" + (free >> 20) + "MB) ...waiting for a bit");
 
                 // Wait until memory drops below safe values. Do check if aborting!
-                while (runtime.freeMemory() < LightCleaner.minFreeMemory && !fixThread.isStopRequested()) {
-                    sleep(1000);
+                while ((free = runtime.freeMemory()) < LightCleaner.minFreeMemory && !this.isStopRequested()) {
+                    sleep(10000);
+                    runtime.gc();
+                }
+
+                if (!this.isStopRequested()) {
+                    LightCleaner.plugin.log(Level.WARNING, "Got enough memory again to resume (" + (free >> 20) + "MB)");
                 }
             }
         }
