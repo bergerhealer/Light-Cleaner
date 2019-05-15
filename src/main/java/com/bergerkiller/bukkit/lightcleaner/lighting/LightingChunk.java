@@ -19,7 +19,6 @@ import org.bukkit.Chunk;
 import org.bukkit.World;
 
 import java.util.Arrays;
-import java.util.EnumSet;
 import java.util.logging.Level;
 
 /**
@@ -95,41 +94,12 @@ public class LightingChunk {
 
         // Initialize and then load sky light heightmap information
         if (this.hasSkyLight) {
-            ChunkUtil.initializeHeightMap(chunk, EnumSet.of(HeightMap.Type.LIGHT_BLOCKING));
-
-            // Compute the heightmap ourselves. Since MC 1.14 the initialization above is meaningless.
-            {
-                ChunkHandle chunkHandle = ChunkHandle.fromBukkit(chunk);
-                World world = chunkHandle.getBukkitChunk().getWorld();
-                int baseX = chunkHandle.getLocX() << 4;
-                int baseZ = chunkHandle.getLocZ() << 4;
-                int highestY = chunkHandle.getTopSliceY();
-                int heightKey = 0;
-                for (int z = 0; z < 16; ++z) {
-                    for (int x = 0; x < 16; ++x) {
-                        int y = highestY + 16;
-                        while (y > 0) {
-                            if (chunkHandle.getBlockDataAtCoord(x, y - 1, z).getOpacity(world, baseX+x, y, baseZ+z) == 0) {
-                                --y;
-                                continue;
-                            }
-                            --y;
-                            break;
-                        }
-                        this.heightmap[heightKey++] = y;
-                    }
-                }
-            }
-
-            // Old code. Breaks with MC 1.14.
-            /*
-            HeightMap heightmap = ChunkUtil.getHeightMap(chunk, HeightMap.Type.LIGHT_BLOCKING);
+            HeightMap heightmap = ChunkUtil.getLightHeightMap(chunk, true);
             for (int x = 0; x < 16; ++x) {
                 for (int z = 0; z < 16; ++z) {
                     this.heightmap[this.getHeightKey(x, z)] = Math.max(0, heightmap.getHeight(x, z));
                 }
             }
-            */
         } else {
             Arrays.fill(this.heightmap, ChunkHandle.fromBukkit(chunk).getTopSliceY() + 15);
         }
