@@ -1,6 +1,7 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.bases.IntVector2;
+import com.bergerkiller.bukkit.common.chunk.ForcedChunk;
 import com.bergerkiller.bukkit.common.conversion.type.HandleConversion;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
@@ -48,6 +49,7 @@ public class LightingChunk {
     public boolean isChunkLoading = false;
     public IntVector2 start = new IntVector2(1, 1);
     public IntVector2 end = new IntVector2(14, 14);
+    public final ForcedChunk forcedChunk = ForcedChunk.none();
 
     public LightingChunk(World world, int x, int z) {
         this.world = world;
