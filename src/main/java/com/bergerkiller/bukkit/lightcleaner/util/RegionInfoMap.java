@@ -52,6 +52,31 @@ public class RegionInfoMap {
 
     /**
      * Creates a region information mapping of all existing chunks of a world
+     * that are currently loaded. No further loading is required.
+     * 
+     * @param world
+     * @return region info map
+     */
+    public static RegionInfoMap createLoaded(World world) {
+        LongHashMap<RegionInfo> regions = new LongHashMap<RegionInfo>();
+        for (Chunk chunk : world.getLoadedChunks()) {
+            int rx = WorldUtil.chunkToRegionIndex(chunk.getX());
+            int rz = WorldUtil.chunkToRegionIndex(chunk.getZ());
+            RegionInfo info = regions.get(rx, rz);
+            if (info == null) {
+                info = new RegionInfo(world, rx, rz);
+                info.ignoreLoad();
+                regions.put(rx, rz, info);
+            }
+
+            info.addChunk(chunk.getX(), chunk.getZ());
+        }
+
+        return new RegionInfoMap(world, regions);
+    }
+
+    /**
+     * Creates a region information mapping of all existing chunks of a world
      * 
      * @param world
      * @return region info map
@@ -80,5 +105,4 @@ public class RegionInfoMap {
 
         return new RegionInfoMap(world, regions);
     }
-
 }

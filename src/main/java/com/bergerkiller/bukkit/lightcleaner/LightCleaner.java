@@ -2,9 +2,7 @@ package com.bergerkiller.bukkit.lightcleaner;
 
 import java.util.logging.Level;
 
-import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
@@ -12,7 +10,6 @@ import com.bergerkiller.bukkit.common.Common;
 import com.bergerkiller.bukkit.common.PluginBase;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
-import com.bergerkiller.bukkit.common.utils.ParseUtil;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
 
 public class LightCleaner extends PluginBase {
@@ -81,32 +78,7 @@ public class LightCleaner extends PluginBase {
     public boolean command(CommandSender sender, String command, String[] args) {
         try {
             String subCmd = (args.length == 0) ? "" : args[0];
-            if (subCmd.equalsIgnoreCase("world")) {
-                // cleanlight world
-                Permission.CLEAN.handle(sender);
-                Permission.CLEAN_WORLD.handle(sender);
-
-                final World world;
-                if (args.length >= 2) {
-                    world = Bukkit.getWorld(args[1]);
-                    if (world == null) {
-                        sender.sendMessage(ChatColor.RED + "World '" + args[1] + "' was not found!");
-                        return true;
-                    }
-                } else if (sender instanceof Player) {
-                    world = ((Player) sender).getWorld();
-                } else {
-                    sender.sendMessage("As a console you have to specify the world to fix!");
-                    return true;
-                }
-
-                // Fix all the chunks in this world
-                sender.sendMessage(ChatColor.YELLOW + "The world is now being fixed, this may take very long!");
-                sender.sendMessage(ChatColor.YELLOW + "To view the fixing status, use /cleanlight status");
-                LightingService.addRecipient(sender);
-                // Get an iterator for all the chunks to fix
-                LightingService.scheduleWorld(world);
-            } else if (subCmd.equalsIgnoreCase("abort")) {
+            if (subCmd.equalsIgnoreCase("abort")) {
                 // cleanlight abort
                 Permission.ABORT.handle(sender);
                 if (LightingService.isProcessing()) {
@@ -115,7 +87,9 @@ public class LightCleaner extends PluginBase {
                 } else {
                     sender.sendMessage(ChatColor.YELLOW + "No lighting was being processed; there was nothing to abort.");
                 }
-            } else if (subCmd.equalsIgnoreCase("pause")) {
+                return true;
+            }
+            if (subCmd.equalsIgnoreCase("pause")) {
                 // cleanlight pause
                 Permission.PAUSE.handle(sender);
                 LightingService.setPaused(true);
@@ -123,8 +97,9 @@ public class LightCleaner extends PluginBase {
                 if (LightingService.isProcessing()) {
                     sender.sendMessage(ChatColor.RED.toString() + LightingService.getChunkFaults() + ChatColor.YELLOW + " chunks are pending");
                 }
-
-            } else if (subCmd.equalsIgnoreCase("resume")) {
+                return true;
+            }
+            if (subCmd.equalsIgnoreCase("resume")) {
                 // cleanlight resume
                 Permission.PAUSE.handle(sender);
                 LightingService.setPaused(false);
@@ -132,8 +107,9 @@ public class LightCleaner extends PluginBase {
                 if (LightingService.isProcessing()) {
                     sender.sendMessage(ChatColor.RED.toString() + LightingService.getChunkFaults() + ChatColor.YELLOW + " chunks will now be processed");
                 }
-
-            } else if (subCmd.equalsIgnoreCase("status")) {
+                return true;
+            }
+            if (subCmd.equalsIgnoreCase("status")) {
                 // cleanlight status
                 Permission.STATUS.handle(sender);
                 if (LightingService.isProcessing()) {
@@ -149,64 +125,16 @@ public class LightCleaner extends PluginBase {
                 } else {
                     sender.sendMessage(ChatColor.GREEN + "No lighting is being processed at this time.");
                 }
-            } else if (args.length > 0 && args[0].equalsIgnoreCase("dirty")) {
-                // cleanlight dirty
-                Permission.DIRTY_DEBUG.handle(sender);
-
-                if (sender instanceof Player) {
-                    Player p = (Player) sender;
-                    int radius = Bukkit.getServer().getViewDistance();
-                    if (args.length >= 2) {
-                        int new_radius = ParseUtil.parseInt(args[1], radius);
-                        if (new_radius > radius && !Permission.CLEAN_AREA.has(sender)) {
-                            int n = (radius * 2 + 1);
-                            sender.sendMessage(ChatColor.RED + "You do not have permission to clean areas larger than " +
-                                n + " x " + n);
-                            return true;
-                        }
-                        radius = new_radius;
-                    }
-
-                    LightingService.ScheduleArguments scheduleArgs = new LightingService.ScheduleArguments();
-                    scheduleArgs.setChunksAround(p.getLocation(), radius);
-                    scheduleArgs.setDebugMakeCorrupted(true);
-                    LightingService.schedule(scheduleArgs);
-
-                    p.sendMessage(ChatColor.GREEN + "A " + (radius * 2 + 1) + " X " + (radius * 2 + 1) + " chunk area around you is currently being corrupted, introducing lighting issues...");
-                    LightingService.addRecipient(sender);
-                } else {
-                    sender.sendMessage("This command is only available to players");
-                }
-            } else if (args.length == 0 || ParseUtil.isNumeric(args[0])) {
-                // cleanlight
-                Permission.CLEAN.handle(sender);
-
-                if (sender instanceof Player) {
-                    Player p = (Player) sender;
-                    int radius = Bukkit.getServer().getViewDistance();
-                    if (args.length >= 1) {
-                        int new_radius = ParseUtil.parseInt(args[0], radius);
-                        if (new_radius > radius && !Permission.CLEAN_AREA.has(sender)) {
-                            int n = (radius * 2 + 1);
-                            sender.sendMessage(ChatColor.RED + "You do not have permission to clean areas larger than " +
-                                n + " x " + n);
-                            return true;
-                        }
-                        radius = new_radius;
-                    }
-
-                    LightingService.ScheduleArguments scheduleArgs = new LightingService.ScheduleArguments();
-                    scheduleArgs.setChunksAround(p.getLocation(), radius);
-                    LightingService.schedule(scheduleArgs);
-
-                    p.sendMessage(ChatColor.GREEN + "A " + (radius * 2 + 1) + " X " + (radius * 2 + 1) + " chunk area around you is currently being fixed from lighting issues...");
-                    LightingService.addRecipient(sender);
-                } else {
-                    sender.sendMessage("This command is only available to players");
-                }
-            } else {
-                return false; // unknown command
+                return true;
             }
+
+            // All other commands are parsed into schedule arguments for the lighting scheduler
+            LightingService.ScheduleArguments scheduleArgs = new LightingService.ScheduleArguments();
+            if (scheduleArgs.handleCommandInput(sender, args)) {
+                LightingService.schedule(scheduleArgs);
+                LightingService.addRecipient(sender);
+            }
+
         } catch (NoPermissionException ex) {
             if (sender instanceof Player) {
                 sender.sendMessage(ChatColor.RED + "You don't have permission to use this!");

@@ -14,15 +14,6 @@ public interface LightingTask {
     World getWorld();
 
     /**
-     * Checks whether a certain chunk is contained
-     *
-     * @param chunkX
-     * @param chunkZ
-     * @return True if contained, False if not
-     */
-    boolean containsChunk(int chunkX, int chunkZ);
-
-    /**
      * Gets the amount of chunks this task is going to fix.
      * This can be a wild estimate. While processing this amount should be
      * updated as well.
@@ -52,4 +43,16 @@ public interface LightingTask {
      * Called from a synchronized task, ticking this task every tick
      */
     void syncTick();
+
+    /**
+     * Whether this task can be saved to PendingLight.dat
+     * 
+     * @return True if it can be saved
+     */
+    boolean canSave();
+
+    /**
+     * Loads additional options
+     */
+    void applyOptions(LightingService.ScheduleArguments args);
 }

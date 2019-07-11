@@ -5,12 +5,15 @@ import com.bergerkiller.bukkit.common.Task;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.config.CompressedDataReader;
 import com.bergerkiller.bukkit.common.config.CompressedDataWriter;
+import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
+import com.bergerkiller.bukkit.common.utils.ParseUtil;
 import com.bergerkiller.bukkit.common.utils.StringUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
+import com.bergerkiller.bukkit.lightcleaner.Permission;
 import com.bergerkiller.bukkit.lightcleaner.util.RegionInfo;
 import com.bergerkiller.bukkit.lightcleaner.util.RegionInfoMap;
 
@@ -160,46 +163,68 @@ public class LightingService extends AsyncTask {
 
     public static void schedule(ScheduleArguments args) {
         // World not allowed to be null
-        if (args.world == null) {
+        if (args.getWorld() == null) {
             throw new IllegalArgumentException("Schedule arguments 'world' is null");
         }
 
         // If no chunks specified, entire world
-        if (args.chunks == null) {
-            schedule(new LightingTaskWorld(args.world));
+        if (args.isEntireWorld()) {
+            LightingTaskWorld task = new LightingTaskWorld(args.getWorld());
+            task.applyOptions(args);
+            schedule(task);
             return;
         }
 
         // If less than 34x34 chunks are requested, schedule as one task
         // In that case, be sure to only schedule chunks that actually exist
         // This prevents generating new chunks as part of this command
-        if (args.chunks.size() <= (34*34)) {
+        LongHashSet chunks = args.getChunks();
+        if (chunks.size() <= (34*34)) {
 
-            // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
-            // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
-            LongHashSet chunks_filtered = new LongHashSet(args.chunks.size());
-            LongIterator iter = args.chunks.longIterator();
-            while (iter.hasNext()) {
-                long chunk = iter.next();
-                int cx = MathUtil.longHashMsw(chunk);
-                int cz = MathUtil.longHashLsw(chunk);
-                if (WorldUtil.isChunkAvailable(args.world, cx, cz)) {
-                    chunks_filtered.add(chunk);
+            LongHashSet chunks_filtered = new LongHashSet(chunks.size());
+            LongIterator iter = chunks.longIterator();
+
+            if (args.getLoadedChunksOnly()) {
+                // Remove coordinates of chunks that aren't loaded
+                while (iter.hasNext()) {
+                    long chunk = iter.next();
+                    int cx = MathUtil.longHashMsw(chunk);
+                    int cz = MathUtil.longHashLsw(chunk);
+                    if (WorldUtil.isLoaded(args.getWorld(), cx, cz)) {
+                        chunks_filtered.add(chunk);
+                    }
+                }
+            } else {
+                // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
+                // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
+                while (iter.hasNext()) {
+                    long chunk = iter.next();
+                    int cx = MathUtil.longHashMsw(chunk);
+                    int cz = MathUtil.longHashLsw(chunk);
+                    if (WorldUtil.isChunkAvailable(args.getWorld(), cx, cz)) {
+                        chunks_filtered.add(chunk);
+                    }
                 }
             }
 
             // Schedule it
-            LightingTaskBatch task = new LightingTaskBatch(args.world, chunks_filtered);
-            if (args.debugMakeCorrupted) {
-                task.debugMakeCorrupted();
+            if (!chunks_filtered.isEmpty()) {
+                LightingTaskBatch task = new LightingTaskBatch(args.getWorld(), chunks_filtered);
+                task.applyOptions(args);
+                schedule(task);
             }
-            schedule(task);
             return;
         }
 
         // Too many chunks requested. Separate the operations per region file with small overlap.
-        RegionInfoMap regions = RegionInfoMap.create(args.world);
-        LongIterator iter = args.chunks.longIterator();
+        RegionInfoMap regions;
+        if (args.getLoadedChunksOnly()) {
+            regions = RegionInfoMap.createLoaded(args.getWorld());
+        } else {
+            regions = RegionInfoMap.create(args.getWorld());
+        }
+
+        LongIterator iter = chunks.longIterator();
         LongHashSet scheduledRegions = new LongHashSet();
         while (iter.hasNext()) {
             long first_chunk = iter.next();
@@ -210,7 +235,7 @@ public class LightingService extends AsyncTask {
                 continue; // Does not exist or already scheduled
             }
             if (!region.containsChunk(first_chunk_x, first_chunk_z)) {
-                continue; // Chunk does not exist in world (not generated yet)
+                continue; // Chunk does not exist in world (not generated yet) or isn't loaded (loaded chunks only option)
             }
 
             // Collect all chunks to process for this region.
@@ -222,7 +247,7 @@ public class LightingService extends AsyncTask {
                     int cx = region.cx + dx;
                     int cz = region.cz + dz;
                     long chunk_key = MathUtil.longHashToLong(cx, cz);
-                    if (!args.chunks.contains(chunk_key)) {
+                    if (!chunks.contains(chunk_key)) {
                         continue;
                     }
                     if (dx >= 0 && dz >= 0 && dx < 32 && dz < 32) {
@@ -239,12 +264,12 @@ public class LightingService extends AsyncTask {
             }
 
             // Schedule the region
-            scheduledRegions.add(region.rx, region.rz);
-            LightingTaskBatch task = new LightingTaskBatch(args.world, buffer);
-            if (args.debugMakeCorrupted) {
-                task.debugMakeCorrupted();
+            if (!buffer.isEmpty()) {
+                scheduledRegions.add(region.rx, region.rz);
+                LightingTaskBatch task = new LightingTaskBatch(args.getWorld(), buffer);
+                task.applyOptions(args);
+                schedule(task);
             }
-            schedule(task);
         }
     }
 
@@ -254,21 +279,6 @@ public class LightingService extends AsyncTask {
             taskChunkCount += task.getChunkCount();
         }
         setProcessing(true);
-    }
-
-    /**
-     * Checks whether the chunk specified is currently being processed on
-     *
-     * @param chunk to check
-     * @return True if the chunk is being processed, False if not
-     */
-    public static boolean isProcessing(Chunk chunk) {
-        final LightingTask current = currentTask;
-        if (current == null) {
-            return false;
-        } else {
-            return current.getWorld() == chunk.getWorld() && current.containsChunk(chunk.getX(), chunk.getZ());
-        }
     }
 
     /**
@@ -350,7 +360,7 @@ public class LightingService extends AsyncTask {
                 }
                 // Obtain all the batches to save
                 for (LightingTask task : tasks) {
-                    if (task instanceof LightingTaskBatch) {
+                    if (task instanceof LightingTaskBatch && task.canSave()) {
                         batches.add((LightingTaskBatch) task);
                     }
                 }
@@ -543,11 +553,62 @@ public class LightingService extends AsyncTask {
 
     public static class ScheduleArguments {
         private World world;
+        private String worldName;
         private LongHashSet chunks;
         private boolean debugMakeCorrupted = false;
+        private boolean loadedChunksOnly = false;
+        private int radius = Bukkit.getServer().getViewDistance();
 
+        public boolean getDebugMakeCorrupted() {
+            return this.debugMakeCorrupted;
+        }
+
+        public boolean getLoadedChunksOnly() {
+            return this.loadedChunksOnly;
+        }
+
+        public int getRadius() {
+            return this.radius;
+        }
+
+        public boolean isEntireWorld() {
+            return this.chunks == null;
+        }
+
+        public World getWorld() {
+            return this.world;
+        }
+
+        public String getWorldName() {
+            return this.worldName;
+        }
+
+        public LongHashSet getChunks() {
+            return this.chunks;
+        }
+
+        /**
+         * Sets the world itself. Automatically updates the world name.
+         * 
+         * @param world
+         * @return these arguments
+         */
         public ScheduleArguments setWorld(World world) {
             this.world = world;
+            this.worldName = world.getName();
+            return this;
+        }
+
+        /**
+         * Sets the world name to perform operations on.
+         * If the world by this name does not exist, the world is null.
+         * 
+         * @param worldName
+         * @return these arguments
+         */
+        public ScheduleArguments setWorldName(String worldName) {
+            this.world = Bukkit.getWorld(worldName);
+            this.worldName = worldName;
             return this;
         }
 
@@ -561,34 +622,153 @@ public class LightingService extends AsyncTask {
             return this;
         }
 
+        public ScheduleArguments setLoadedChunksOnly(boolean loadedChunksOnly) {
+            this.loadedChunksOnly = loadedChunksOnly;
+            return this;
+        }
+
+        public ScheduleArguments setRadius(int radius) {
+            this.radius = radius;
+            return this;
+        }
+
         public ScheduleArguments setChunksAround(Location location, int radius) {
             this.setWorld(location.getWorld());
             return this.setChunksAround(location.getBlockX()>>4, location.getBlockZ()>>4, radius);
         }
 
         public ScheduleArguments setChunksAround(int middleX, int middleZ, int radius) {
-            this.chunks = new LongHashSet((2*radius)*(2*radius));
+            this.setRadius(radius);
+
+            LongHashSet chunks_hashset = new LongHashSet((2*radius)*(2*radius));
             for (int a = -radius; a <= radius; a++) {
                 for (int b = -radius; b <= radius; b++) {
                     int cx = middleX + a;
                     int cz = middleZ + b;
-                    this.chunks.add(cx, cz);
+                    chunks_hashset.add(cx, cz);
                 }
             }
-            return this;
+            return this.setChunks(chunks_hashset);
         }
 
         public ScheduleArguments setChunks(Collection<IntVector2> chunks) {
-            this.chunks = new LongHashSet(chunks.size());
+            LongHashSet chunks_hashset = new LongHashSet(chunks.size());
             for (IntVector2 coord : chunks) {
-                this.chunks.add(coord.x, coord.z);
+                chunks_hashset.add(coord.x, coord.z);
             }
-            return this;
+            return this.setChunks(chunks_hashset);
         }
 
         public ScheduleArguments setChunks(LongHashSet chunks) {
             this.chunks = chunks;
             return this;
+        }
+
+        /**
+         * Parses the arguments specified in a command
+         * 
+         * @param sender
+         * @return false if the input is incorrect and operations may not proceed
+         * @throws NoPermissionException
+         */
+        public boolean handleCommandInput(CommandSender sender, String[] args) throws NoPermissionException {
+            {
+                // Parsing
+                boolean entireWorld = false;
+                for (int i = 0; i < args.length; i++) {
+                    String arg = args[i];
+                    if (arg.equalsIgnoreCase("dirty")) {
+                        setDebugMakeCorrupted(true);
+                    } else if (arg.equalsIgnoreCase("loaded")) {
+                        setLoadedChunksOnly(true);
+                    } else if (i == 0 && arg.equalsIgnoreCase("world")) {
+                        entireWorld = true;
+                    } else if (entireWorld) {
+                        this.setWorldName(arg);
+                    } else if (ParseUtil.isNumeric(arg)) {
+                        this.setRadius(ParseUtil.parseInt(arg, this.getRadius()));
+                    }
+                }
+
+                // Permission handling
+                if (this.getDebugMakeCorrupted()) {
+                    Permission.DIRTY_DEBUG.handle(sender);
+                } else {
+                    Permission.CLEAN.handle(sender);
+                }
+                if (entireWorld) {
+                    // Clean world permission
+                    Permission.CLEAN_WORLD.handle(sender);
+                } else {
+                    // Check radius is less than the default, unless special permission is granted
+                    if (this.getRadius() > Bukkit.getServer().getViewDistance() && !Permission.CLEAN_AREA.has(sender)) {
+                        int n = (Bukkit.getServer().getViewDistance() * 2 + 1);
+                        sender.sendMessage(ChatColor.RED + "You do not have permission to clean areas larger than " +
+                                n + " x " + n);
+                        return false;
+                    }
+
+                    // Check sender is a player
+                    if (!(sender instanceof Player)) {
+                        // Can't do this from console. TODO?
+                        sender.sendMessage("This command is only available to players");
+                        return false;
+                    }
+                }
+
+                // Input validation or completion
+                if (entireWorld) {
+                    if (this.getWorldName() != null && this.getWorld() == null) {
+                        sender.sendMessage(ChatColor.RED + "World '" + this.getWorldName() + "' was not found!");
+                        return false;
+                    }
+
+                    if (this.getWorldName() == null) {
+                        if (sender instanceof Player) {
+                            this.setWorld(((Player) sender).getWorld());
+                        } else {
+                            sender.sendMessage("As a console you have to specify the world to fix!");
+                            return false;
+                        }
+                    }
+
+                    this.setEntireWorld();
+                } else {
+                    this.setChunksAround(((Player) sender).getLocation(), this.getRadius());
+                }
+            }
+
+            // Response message
+            if (this.isEntireWorld()) {
+                // World logic
+                String message = ChatColor.YELLOW + "The ";
+                if (this.getLoadedChunksOnly()) {
+                    message += "loaded chunks of ";
+                }
+                message += "the world " + this.getWorldName() + " ";
+                if (this.getDebugMakeCorrupted()) {
+                    message += "is now being corrupted, this may take very long!";
+                } else {
+                    message += "is now being fixed, this may take very long!";
+                }
+                sender.sendMessage(message);
+                sender.sendMessage(ChatColor.YELLOW + "To view the status, use /cleanlight status");
+            } else {
+                // Radius logic
+                int n = (getRadius() * 2 + 1);
+                String message = ChatColor.GREEN + "A " + n + " X " + n + " ";
+                if (this.getLoadedChunksOnly()) {
+                    message += ChatColor.YELLOW + "loaded " + ChatColor.GREEN;
+                }
+                if (this.getDebugMakeCorrupted()) {
+                    message += "chunk area around you is currently being corrupted, introducing lighting issues...";
+                } else {
+                    message += "chunk area around you is currently being fixed from lighting issues...";
+                }
+                sender.sendMessage(message);
+            }
+
+            return true;
         }
     }
 }

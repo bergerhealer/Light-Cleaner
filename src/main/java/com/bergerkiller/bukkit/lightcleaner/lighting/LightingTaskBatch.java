@@ -7,6 +7,7 @@ import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
+import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -29,20 +30,11 @@ public class LightingTaskBatch implements LightingTask {
     private Runnable activeTask = null;
     private boolean done = false;
     private boolean aborted = false;
-    private boolean debugMakeCorrupted = false;
+    private LightingService.ScheduleArguments options = new LightingService.ScheduleArguments();
 
     public LightingTaskBatch(World world, LongHashSet chunkCoordinates) {
         this.world = world;
         this.chunksCoords = chunkCoordinates;
-    }
-
-    /**
-     * For debugging: skips the spreading phase of the cleaning process, causing
-     * bugged lighting to be left behind. This bugged lighting should be fixed by
-     * the plugin after.
-     */
-    public void debugMakeCorrupted() {
-        this.debugMakeCorrupted = true;
     }
 
     @Override
@@ -99,13 +91,6 @@ public class LightingTaskBatch implements LightingTask {
             cz /= count;
         }
         return "Cleaning " + count + " chunks near x=" + (cx*16) + " z=" + (cz*16);
-    }
-
-    @Override
-    public boolean containsChunk(int chunkX, int chunkZ) {
-        synchronized (this.chunksCoords) {
-            return this.chunksCoords.contains(chunkX, chunkZ);
-        }
     }
 
     @Override
@@ -317,7 +302,7 @@ public class LightingTaskBatch implements LightingTask {
         }
 
         // Skip spread phase when debug mode is active
-        if (this.debugMakeCorrupted) {
+        if (this.options.getDebugMakeCorrupted()) {
             this.completed();
             return;
         }
@@ -340,5 +325,15 @@ public class LightingTaskBatch implements LightingTask {
         if (DEBUG_LOG) {
             System.out.println("Processed " + totalLoops + " in " + duration + " ms");
         }
+    }
+
+    @Override
+    public void applyOptions(ScheduleArguments args) {
+        this.options = args;
+    }
+
+    @Override
+    public boolean canSave() {
+        return !this.options.getLoadedChunksOnly() && !this.options.getDebugMakeCorrupted();
     }
 }

@@ -57,6 +57,13 @@ public class RegionInfo {
     }
 
     /**
+     * Ignores loading region chunk information from chunks that aren't loaded
+     */
+    public void ignoreLoad() {
+        this._loadedFromDisk = true;
+    }
+
+    /**
      * Gets whether a chunk is contained and exists inside this region
      * 
      * @param cx - chunk coordinates (world coordinates)
