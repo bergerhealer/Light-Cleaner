@@ -2,7 +2,6 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.chunk.ForcedChunk;
-import com.bergerkiller.bukkit.common.conversion.type.HandleConversion;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.common.wrappers.HeightMap;
@@ -10,11 +9,6 @@ import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
 import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
 import com.bergerkiller.generated.net.minecraft.server.WorldHandle;
-import com.bergerkiller.mountiplex.reflection.MethodAccessor;
-import com.bergerkiller.mountiplex.reflection.SafeDirectMethod;
-import com.bergerkiller.mountiplex.reflection.SafeField;
-import com.bergerkiller.mountiplex.reflection.SafeMethod;
-import com.bergerkiller.mountiplex.reflection.declarations.Template;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;
@@ -260,7 +254,7 @@ public class LightingChunk {
             return 0;
         }
         int x, y, z, light, factor, startY, newlight;
-        int loops = -1;
+        int loops = 0;
         int lasterrx = 0, lasterry = 0, lasterrz = 0;
         final int maxY = getTopY();
         boolean haserror;
@@ -275,18 +269,8 @@ public class LightingChunk {
         boolean mode = false;
         IntVector2 loop_start, loop_end;
         int loop_increment;
-        do {
+        while (true) {
             haserror = false;
-            if (++loops > 100) {
-                lasterrx += this.chunkX << 4;
-                lasterrz += this.chunkZ << 4;
-                StringBuilder msg = new StringBuilder();
-                msg.append("Failed to fix all " + (skyLight ? "Sky" : "Block") + " lighting at [");
-                msg.append(lasterrx).append('/').append(lasterry);
-                msg.append('/').append(lasterrz).append(']');
-                LightCleaner.plugin.log(Level.WARNING, msg.toString());
-                break;
-            }
 
             // Alternate iterating positive and negative
             // This allows proper optimized spreading in all directions
@@ -339,7 +323,20 @@ public class LightingChunk {
                     }
                 }
             }
-        } while (haserror);
+
+            if (!haserror) {
+                break;
+            } else if (++loops > 100) {
+                lasterrx += this.chunkX << 4;
+                lasterrz += this.chunkZ << 4;
+                StringBuilder msg = new StringBuilder();
+                msg.append("Failed to fix all " + (skyLight ? "Sky" : "Block") + " lighting at [");
+                msg.append(lasterrx).append('/').append(lasterry);
+                msg.append('/').append(lasterrz).append(']');
+                LightCleaner.plugin.log(Level.WARNING, msg.toString());
+                break;
+            }
+        }
 
         if (skyLight) {
             this.isSkyLightDirty = false;
@@ -383,39 +380,10 @@ public class LightingChunk {
         }
         if (hasChanges) {
             // Call markDirty() on the chunk
-            markDirtyMethod.invoke(HandleConversion.toChunkHandle(chunk));
+            ChunkHandle.fromBukkit(chunk).markDirty();
         }
         this.isApplied = true;
         return hasChanges;
     }
 
-    /*
-     * markDirty() initialization and fallback for older BKCommonLib versions
-     */
-    private static final MethodAccessor<Void> markDirtyMethod = findMarkDirtyMethod();
-
-    private static MethodAccessor<Void> findMarkDirtyMethod() {
-        // Find in the most recent BKCommonLib
-        if (SafeField.contains(ChunkHandle.T.getClass(), "markDirty", Template.Method.class)) {
-            Template.Method<?> bkcMethod = SafeField.get(ChunkHandle.T, "markDirty", Template.Method.class);
-            return bkcMethod.toMethodAccessor();
-        }
-
-        // Fallback only officially supports MC 1.8.8 - MC1.12.2
-        if (SafeMethod.contains(ChunkHandle.T.getType(), "markDirty")) {
-            // >= MC1.12
-            return new SafeMethod<Void>(ChunkHandle.T.getType(), "markDirty");
-        } else if (SafeMethod.contains(ChunkHandle.T.getType(), "e")) {
-            // < MC1.12
-            return new SafeMethod<Void>(ChunkHandle.T.getType(), "e");
-        } else {
-            // No idea :(
-            return new SafeDirectMethod<Void>() {
-                @Override
-                public Void invoke(Object arg0, Object... arg1) {
-                    return null;
-                }
-            };
-        }
-    }
 }
