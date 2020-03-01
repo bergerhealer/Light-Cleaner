@@ -3,7 +3,6 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.chunk.ForcedChunk;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
-import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.common.wrappers.HeightMap;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
@@ -41,7 +40,6 @@ public class LightingChunk {
     public boolean isSkyLightDirty = true;
     public boolean isBlockLightDirty = true;
     public boolean isFilled = false;
-    public boolean isApplied = false;
     public boolean isChunkLoading = false;
     public IntVector2 start = new IntVector2(1, 1);
     public IntVector2 end = new IntVector2(14, 14);
@@ -385,20 +383,15 @@ public class LightingChunk {
                 futures[section] = CompletableFuture.completedFuture(Boolean.FALSE);
             }
         }
-        this.isApplied = true;
 
         // When all of them complete, combine them into a single future
         // If any changes were made to the chunk, return True as completed value
-        final CompletableFuture<Boolean> syncFuture = new CompletableFuture<Boolean>();
-        CompletableFuture.allOf(futures).thenAccept((o) -> {
+        return CompletableFuture.allOf(futures).thenApply((o) -> {
             try {
                 for (CompletableFuture<Boolean> future : futures) {
                     if (future.get().booleanValue()) {
-                        CommonUtil.nextTick(() -> {
-                            ChunkHandle.fromBukkit(chunk).markDirty();
-                            syncFuture.complete(Boolean.TRUE);
-                        });
-                        return;
+                        ChunkHandle.fromBukkit(chunk).markDirty();
+                        return Boolean.TRUE;
                     }
                 }
             } catch (Throwable t) {
@@ -406,11 +399,8 @@ public class LightingChunk {
             }
 
             // None of the futures completed true
-            CommonUtil.nextTick(() -> {
-                syncFuture.complete(Boolean.FALSE);
-            });
+            return Boolean.FALSE;
         });
-        return syncFuture;
     }
 
 }

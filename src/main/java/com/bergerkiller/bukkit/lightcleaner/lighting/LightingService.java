@@ -1,7 +1,6 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.AsyncTask;
-import com.bergerkiller.bukkit.common.Task;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.config.CompressedDataReader;
 import com.bergerkiller.bukkit.common.config.CompressedDataWriter;
@@ -33,7 +32,6 @@ public class LightingService extends AsyncTask {
     private static final LinkedList<LightingTask> tasks = new LinkedList<LightingTask>();
     private static final int PENDING_WRITE_INTERVAL = 10;
     private static AsyncTask fixThread = null;
-    private static Task tickTask = null;
     private static int taskChunkCount = 0;
     private static int taskCounter = 0;
     private static boolean pendingFileInUse = false;
@@ -61,20 +59,9 @@ public class LightingService extends AsyncTask {
         }
         if (process) {
             fixThread = new LightingService().start(true);
-            tickTask = new Task(LightCleaner.plugin) {
-                @Override
-                public void run() {
-                    final LightingTask current = currentTask;
-                    if (current != null) {
-                        current.syncTick();
-                    }
-                }
-            }.start(1, 1);
         } else {
             // Fix thread is running, abort
-            Task.stop(tickTask);
             AsyncTask.stop(fixThread);
-            tickTask = null;
             fixThread = null;
         }
     }
@@ -317,11 +304,13 @@ public class LightingService extends AsyncTask {
                         stream.skip(chunkCount * (Long.SIZE / Byte.SIZE));
                         continue;
                     }
+
                     // Load all the coordinates
-                    LongHashSet coords = new LongHashSet(chunkCount);
+                    long[] coords = new long[chunkCount];
                     for (int i = 0; i < chunkCount; i++) {
-                        coords.add(stream.readLong());
+                        coords[i] = stream.readLong();
                     }
+
                     // Schedule and clear
                     schedule(new LightingTaskBatch(world, coords));
                 }
@@ -411,6 +400,7 @@ public class LightingService extends AsyncTask {
         synchronized (tasks) {
             tasks.clear();
         }
+        currentTask = null;
         taskChunkCount = 0;
     }
 
@@ -424,16 +414,13 @@ public class LightingService extends AsyncTask {
         final AsyncTask service = fixThread;
         if (service != null && current != null) {
             setProcessing(false);
-            LightCleaner.plugin.log(Level.INFO, "Processing lighting in the remaining " + current.getChunkCount() + " chunks...");
-
-            // Sync task no longer executes: make sure that we tick the tasks
-            while (service.isRunning()) {
-                current.syncTick();
-                sleep(20);
-            }
+            current.abort();
         }
         // Clear lighting tasks
         synchronized (tasks) {
+            if (current != null) {
+                tasks.addFirst(current);
+            }
             if (!tasks.isEmpty()) {
                 LightCleaner.plugin.log(Level.INFO, "Writing the pending lighting tasks (" + tasks.size() + ") to file to continue later...");
                 LightCleaner.plugin.log(Level.INFO, "Want to abort all operations? Delete the 'PendingLighting.dat' file from the plugins/LightCleaner folder");
@@ -510,7 +497,11 @@ public class LightingService extends AsyncTask {
             // Subtract task from the task count
             taskChunkCount -= currentTask.getChunkCount();
             // Process the task
-            currentTask.process();
+            try {
+                currentTask.process();
+            } catch (Throwable t) {
+                LightCleaner.plugin.getLogger().log(Level.SEVERE, "Failed to process task: " + currentTask.getStatus(), t);
+            }
 
             // Protection against 'out of memory' issues
             // Every time a lighting task is done, we leave behind a very large amount of data

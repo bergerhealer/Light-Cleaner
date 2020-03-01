@@ -1,9 +1,13 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
+import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
 import com.bergerkiller.bukkit.lightcleaner.util.RegionInfo;
 import com.bergerkiller.bukkit.lightcleaner.util.RegionInfoMap;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import org.bukkit.World;
 
@@ -11,7 +15,6 @@ public class LightingTaskWorld implements LightingTask {
     private static final int ASSUMED_CHUNKS_PER_REGION = 34 * 34;
     private final World world;
     private volatile RegionInfoMap regions = null;
-    private final Object regionsWaitObject = new Object();
     private volatile int regionCountLoaded;
     private volatile int chunkCount;
     private volatile boolean aborted;
@@ -44,10 +47,12 @@ public class LightingTaskWorld implements LightingTask {
     }
 
     @Override
-    public void syncTick() {
-        // Initialize the regions map
-        if (this.regions == null) {
-            synchronized (this.regionsWaitObject) {
+    public void process() {
+        // Load regions on the main thread
+        // TODO: Can use main thread executor instead
+        final CompletableFuture<Void> regionsLoadedFuture = new CompletableFuture<Void>();
+        CommonUtil.nextTick(() -> {
+            try {
                 if (this.options.getLoadedChunksOnly()) {
                     this.regions = RegionInfoMap.createLoaded(this.getWorld());
                     this.regionCountLoaded = this.regions.getRegionCount();
@@ -60,24 +65,24 @@ public class LightingTaskWorld implements LightingTask {
                     this.regionCountLoaded = 0;
                     this.chunkCount = this.regions.getRegionCount() * ASSUMED_CHUNKS_PER_REGION;
                 }
-                this.regionsWaitObject.notifyAll();
+                regionsLoadedFuture.complete(null);
+            } catch (Throwable ex) {
+                regionsLoadedFuture.completeExceptionally(ex);
             }
+        });
+
+        // Wait until region list is loaded synchronously
+        try {
+            regionsLoadedFuture.get();
+        } catch (InterruptedException ex) {
+            // Ignore
+        } catch (ExecutionException ex) {
+            throw new RuntimeException("Failed to load regions", ex.getCause());
         }
-    }
 
-    @Override
-    public void process() {
-        // Wait until regions are loaded synchronously
-        synchronized (this.regionsWaitObject) {
-            while (this.regions == null) {
-                try {
-                    this.regionsWaitObject.wait(1000);
-                } catch (InterruptedException e) {}
-
-                if (this.aborted) {
-                    return;
-                }
-            }
+        // Check aborted
+        if (this.aborted) {
+            return;
         }
 
         // Start loading all chunks contained in the regions
@@ -133,9 +138,6 @@ public class LightingTaskWorld implements LightingTask {
     @Override
     public void abort() {
         this.aborted = true;
-        synchronized (this.regionsWaitObject) {
-            this.regionsWaitObject.notifyAll();
-        }
     }
 
     @Override

@@ -40,11 +40,6 @@ public interface LightingTask {
     void abort();
 
     /**
-     * Called from a synchronized task, ticking this task every tick
-     */
-    void syncTick();
-
-    /**
      * Whether this task can be saved to PendingLight.dat
      * 
      * @return True if it can be saved

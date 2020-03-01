@@ -5,12 +5,15 @@ import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
-import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
+import java.util.logging.Level;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;
@@ -21,20 +24,23 @@ import org.bukkit.World;
  * It is literally a batch of chunks being processed.
  */
 public class LightingTaskBatch implements LightingTask {
-    public static final int MAX_PROCESSING_TICK_TIME = 30; // max ms per tick processing
     private static boolean DEBUG_LOG = false; // logs performance stats
     public final World world;
+    private final Object chunks_lock = new Object();
     private LightingChunk[] chunks = null;
-    private final LongHashSet chunksCoords;
-    private final Object waitObject = new Object();
-    private Runnable activeTask = null;
+    private long[] chunks_coords;
     private boolean done = false;
     private boolean aborted = false;
     private LightingService.ScheduleArguments options = new LightingService.ScheduleArguments();
 
+    public LightingTaskBatch(World world, long[] chunkCoordinates) {
+        this.world = world;
+        this.chunks_coords = chunkCoordinates;
+    }
+
     public LightingTaskBatch(World world, LongHashSet chunkCoordinates) {
         this.world = world;
-        this.chunksCoords = chunkCoordinates;
+        this.chunks_coords = chunkCoordinates.toArray();
     }
 
     @Override
@@ -43,25 +49,37 @@ public class LightingTaskBatch implements LightingTask {
     }
 
     public long[] getChunks() {
-        synchronized (this.chunksCoords) {
-            return chunksCoords.toArray();
+        synchronized (this.chunks_lock) {
+            LightingChunk[] chunks = this.chunks;
+            if (chunks != null) {
+                long[] coords = new long[chunks.length];
+                for (int i = 0; i < chunks.length; i++) {
+                    coords[i] = MathUtil.longHashToLong(chunks[i].chunkX, chunks[i].chunkZ);
+                }
+                return coords;
+            } else if (this.chunks_coords != null) {
+                return this.chunks_coords;
+            } else {
+                return new long[0];
+            }
         }
     }
 
     @Override
     public int getChunkCount() {
-        if (this.chunks == null) {
-            synchronized (this.chunksCoords) {
-                return this.done ? 0 : this.chunksCoords.size();
+        synchronized (this.chunks_lock) {
+            if (this.chunks == null) {
+                return this.done ? 0 : this.chunks_coords.length;
+            } else {
+                int faults = 0;
+                for (LightingChunk chunk : this.chunks) {
+                    if (chunk.hasFaults()) {
+                        faults++;
+                    }
+                }
+                return faults;
             }
         }
-        int faults = 0;
-        for (LightingChunk chunk : this.chunks) {
-            if (chunk.hasFaults()) {
-                faults++;
-            }
-        }
-        return faults;
     }
 
     @Override
@@ -69,21 +87,19 @@ public class LightingTaskBatch implements LightingTask {
         int count = 0;
         long cx = 0;
         long cz = 0;
-        if (this.chunks == null) {
-            synchronized (this.chunksCoords) {
-                LongIterator iter = this.chunksCoords.longIterator();
-                while (iter.hasNext()) {
-                    long chunk = iter.next();
+        synchronized (this.chunks_lock) {
+            if (this.chunks == null) {
+                count = this.chunks_coords.length;
+                for (long chunk : this.chunks_coords) {
                     cx += MathUtil.longHashMsw(chunk);
                     cz += MathUtil.longHashLsw(chunk);
-                    count++;
                 }
-            }
-        } else {
-            for (LightingChunk chunk : this.chunks) {
-                cx += chunk.chunkX;
-                cz += chunk.chunkZ;
-                count++;
+            } else {
+                count = this.chunks.length;
+                for (LightingChunk chunk : this.chunks) {
+                    cx += chunk.chunkX;
+                    cz += chunk.chunkZ;
+                }
             }
         }
         if (count > 0) {
@@ -96,20 +112,23 @@ public class LightingTaskBatch implements LightingTask {
     @Override
     public void process() {
         // Initialize lighting chunks
-        LightingChunk[] chunks_new = new LightingChunk[this.chunksCoords.size()];
-        this.done = false;
-        int chunkIdx = 0;
-        LongIterator coordIter = this.chunksCoords.longIterator();
-        while (coordIter.hasNext()) {
-            long longCoord = coordIter.next();
-            int x = MathUtil.longHashMsw(longCoord);
-            int z = MathUtil.longHashLsw(longCoord);
-            chunks_new[chunkIdx++] = new LightingChunk(this.world, x, z);
-            if (this.aborted) {
-                return;
+        synchronized (this.chunks_lock) {
+            LightingChunk[] chunks_new = new LightingChunk[this.chunks_coords.length];
+            this.done = false;
+            int chunkIdx = 0;
+            for (long longCoord : this.chunks_coords) {
+                int x = MathUtil.longHashMsw(longCoord);
+                int z = MathUtil.longHashLsw(longCoord);
+                chunks_new[chunkIdx++] = new LightingChunk(this.world, x, z);
+                if (this.aborted) {
+                    return;
+                }
             }
+
+            // Update fields. We can remove the coordinates to free memory.
+            this.chunks = chunks_new;
+            this.chunks_coords = null;
         }
-        this.chunks = chunks_new;
 
         // Accessibility
         // Load the chunk with data
@@ -175,7 +194,7 @@ public class LightingTaskBatch implements LightingTask {
             // Wait a short while.
             // TODO: Perhaps would be better to use a Lock object for this
             if (!isFullyLoaded) {
-                AsyncTask.sleep(100);
+                AsyncTask.sleep(25);
             }
 
             // If aborted, stop entirely
@@ -190,23 +209,41 @@ public class LightingTaskBatch implements LightingTask {
             return;
         }
 
-        // Apply
-        startApplying();
-        waitForCompletion();
-        if (this.aborted) {
-            return;
+        // Apply and wait for it to be finished
+        // Wait in 200ms intervals to allow for aborting
+        try {
+            CompletableFuture<Void> future = apply();
+            while (true) {
+                try {
+                    future.get(200, TimeUnit.MILLISECONDS);
+                    break;
+                } catch (TimeoutException e) {
+                    if (this.aborted) {
+                        return;
+                    }
+                }
+            }
+        } catch (InterruptedException e) {
+            // Ignore
+        } catch (ExecutionException e) {
+            LightCleaner.plugin.getLogger().log(Level.SEVERE, "Failed to apply lighting data", e.getCause());
         }
+
         this.done = true;
-        this.chunks = null;
+        synchronized (this.chunks_lock) {
+            this.chunks = null;
+        }
     }
 
     @Override
     public void abort() {
         this.aborted = true;
-        LightingTaskBatch.this.completed();
 
         // Close chunks kept loaded
-        LightingChunk[] chunks = this.chunks;
+        LightingChunk[] chunks;
+        synchronized (this.chunks_lock) {
+            chunks = this.chunks;
+        }
         if (chunks != null) {
             for (LightingChunk lc : chunks) {
                 lc.forcedChunk.close();
@@ -215,80 +252,31 @@ public class LightingTaskBatch implements LightingTask {
     }
 
     /**
-     * Waits the calling thread until a task is completed
-     */
-    public void waitForCompletion() {
-        synchronized (waitObject) {
-            try {
-                waitObject.wait();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    @Override
-    public void syncTick() {
-        final Runnable t = activeTask;
-        if (t != null) {
-            t.run();
-        }
-    }
-
-    private void completed() {
-        activeTask = null;
-        synchronized (waitObject) {
-            waitObject.notifyAll();
-        }
-    }
-
-    static int i = 0;
-
-    /**
      * Starts applying the new data to the world.
-     * This is done in several ticks.
+     * This is done in several ticks on the main thread.
+     * The completable future is resolved when applying is finished.
      */
-    public void startApplying() {
-        activeTask = new Runnable() {
-            @Override
-            public void run() {
-                boolean applied = false;
-                long startTime = System.currentTimeMillis();
-                // Apply data to chunks and unload if needed
-                for (LightingChunk lc : LightingTaskBatch.this.chunks) {
-                    if (lc.isApplied) {
-                        continue;
-                    }
-                    applied = true;
-                    Chunk bchunk = world.getChunkAt(lc.chunkX, lc.chunkZ);
+    @SuppressWarnings("unchecked")
+    public CompletableFuture<Void> apply() {
+        // Apply data to chunks and unload if needed
+        LightingChunk[] chunks = LightingTaskBatch.this.chunks;
+        CompletableFuture<Void>[] applyFutures = new CompletableFuture[chunks.length];
+        for (int i = 0; i < chunks.length; i++) {
+            LightingChunk lc = chunks[i];
+            Chunk bchunk = lc.forcedChunk.getChunk();
 
-                    // Remove chunk from management so that it can be unloaded
-                    synchronized (LightingTaskBatch.this.chunksCoords) {
-                        LightingTaskBatch.this.chunksCoords.remove(lc.chunkX, lc.chunkZ);
-                    }
-
-                    // Save to chunk
-                    lc.saveToChunk(bchunk).thenAccept((changed) -> {
-                        // Chunk changed, we need to resend to players
-                        if (changed.booleanValue()) {
-                            WorldUtil.queueChunkSendLight(world, lc.chunkX, lc.chunkZ);
-                        }
-                    });
-
-                    // Closes our forced chunk, may cause the chunk to now unload
-                    lc.forcedChunk.close();
-
-                    // Too long?
-                    if ((System.currentTimeMillis() - startTime) > MAX_PROCESSING_TICK_TIME) {
-                        break;
-                    }
+            // Save to chunk
+            applyFutures[i] = lc.saveToChunk(bchunk).thenAccept((changed) -> {
+                // Chunk changed, we need to resend to players
+                if (changed.booleanValue()) {
+                    WorldUtil.queueChunkSendLight(world, lc.chunkX, lc.chunkZ);
                 }
-                // Nothing applied, all is done?
-                if (!applied) {
-                    LightingTaskBatch.this.completed();
-                }
-            }
-        };
+
+                // Closes our forced chunk, may cause the chunk to now unload
+                lc.forcedChunk.close();
+            });
+        }
+        return CompletableFuture.allOf(applyFutures);
     }
 
     /**
@@ -305,7 +293,6 @@ public class LightingTaskBatch implements LightingTask {
 
         // Skip spread phase when debug mode is active
         if (this.options.getDebugMakeCorrupted()) {
-            this.completed();
             return;
         }
 
@@ -321,7 +308,6 @@ public class LightingTaskBatch implements LightingTask {
                 hasFaults |= count > 0;
             }
         } while (hasFaults && !this.aborted);
-        this.completed();
 
         long duration = System.currentTimeMillis() - startTime;
         if (DEBUG_LOG) {

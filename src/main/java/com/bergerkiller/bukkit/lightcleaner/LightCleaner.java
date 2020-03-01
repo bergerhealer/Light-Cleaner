@@ -6,7 +6,6 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import com.bergerkiller.bukkit.common.Common;
 import com.bergerkiller.bukkit.common.PluginBase;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
@@ -58,8 +57,7 @@ public class LightCleaner extends PluginBase {
         autoCleanEnabled = config.get("autoCleanEnabled", false);
 
         config.setHeader("asyncLoadConcurrency", "\nHow many chunks are asynchronously loaded at the same time");
-        config.addHeader("asyncLoadConcurrency", "Only used loadChunksAsync is true. Setting this value too high");
-        config.addHeader("asyncLoadConcurrency", "may overflow the internal queues. Too low and it will idle too much.");
+        config.addHeader("asyncLoadConcurrency", "Setting this value too high may overflow the internal queues. Too low and it will idle too much.");
         asyncLoadConcurrency = config.get("asyncLoadConcurrency", 50);
 
         config.save();
