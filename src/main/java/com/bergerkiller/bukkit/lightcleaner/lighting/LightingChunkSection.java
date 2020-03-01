@@ -17,11 +17,36 @@ public class LightingChunkSection {
     public LightingChunkSection(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
         this.owner = owner;
 
-        // Block light data (is re-initialized in the fill operation below, no need to read)
-        this.blockLight = NibbleArrayHandle.createNew();
+        if (owner.neighbors.hasAll()) {
+            // Block light data (is re-initialized in the fill operation below, no need to read)
+            this.blockLight = NibbleArrayHandle.createNew();
 
-        // Sky light data (is re-initialized using heightmap operation later, no need to read)
-        this.skyLight = NibbleArrayHandle.createNew();
+            // Sky light data (is re-initialized using heightmap operation later, no need to read)
+            this.skyLight = NibbleArrayHandle.createNew();
+        } else {
+            // We need to load the original light data, because we have a border that we do not update
+
+            // Block light data
+            byte[] blockLightData = WorldUtil.getSectionBlockLight(owner.world,
+                    owner.chunkX, chunkSection.getY(), owner.chunkZ);
+            if (blockLightData != null) {
+                this.blockLight = NibbleArrayHandle.createNew(blockLightData);
+            } else {
+                this.blockLight = NibbleArrayHandle.createNew();
+            }
+
+            // Sky light data
+            byte[] skyLightData = WorldUtil.getSectionSkyLight(owner.world,
+                    owner.chunkX, chunkSection.getY(), owner.chunkZ);
+
+            if (skyLightData != null) {
+                this.skyLight = NibbleArrayHandle.createNew(skyLightData);
+            } else if (hasSkyLight) {
+                this.skyLight = NibbleArrayHandle.createNew();
+            } else {
+                this.skyLight = null;
+            }
+        }
 
         // World coordinates
         int worldX = owner.chunkX << 4;

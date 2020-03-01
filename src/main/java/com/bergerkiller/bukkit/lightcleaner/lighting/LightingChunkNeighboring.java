@@ -23,6 +23,20 @@ public class LightingChunkNeighboring {
     }
 
     /**
+     * Gets whether all 4 chunk neighbors are accessible
+     * 
+     * @return True if all neighbors are accessible
+     */
+    public boolean hasAll() {
+        for (int i = 0; i < 4; i++) {
+            if (values[i] == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Gets the neighbor representing the given relative chunk
      *
      * @param deltaChunkX
