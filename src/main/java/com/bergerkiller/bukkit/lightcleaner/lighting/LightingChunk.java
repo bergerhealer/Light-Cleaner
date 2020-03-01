@@ -3,6 +3,7 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.chunk.ForcedChunk;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
+import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.common.wrappers.HeightMap;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
@@ -14,6 +15,7 @@ import org.bukkit.Chunk;
 import org.bukkit.World;
 
 import java.util.Arrays;
+import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 
 /**
@@ -365,25 +367,50 @@ public class LightingChunk {
     }
 
     /**
-     * Applies the lighting information to a chunk
+     * Applies the lighting information to a chunk. The returned completable future is called
+     * on the main thread when saving finishes.
      *
      * @param chunk to save to
-     * @return whether the chunk had any corrected light levels
+     * @return completable future completed when the chunk is saved,
+     *         with value True passed when saving occurred, False otherwise
      */
-    public boolean saveToChunk(Chunk chunk) {
+    @SuppressWarnings("unchecked")
+    public CompletableFuture<Boolean> saveToChunk(Chunk chunk) {
         ChunkSection[] chunkSections = ChunkUtil.getSections(chunk);
-        boolean hasChanges = false;
+        final CompletableFuture<Boolean>[] futures = new CompletableFuture[chunkSections.length];
         for (int section = 0; section < SECTION_COUNT; section++) {
             if (chunkSections[section] != null && sections[section] != null) {
-                hasChanges |= sections[section].saveToChunk(chunkSections[section]);
+                futures[section] = sections[section].saveToChunk(chunkSections[section]);
+            } else {
+                futures[section] = CompletableFuture.completedFuture(Boolean.FALSE);
             }
         }
-        if (hasChanges) {
-            // Call markDirty() on the chunk
-            ChunkHandle.fromBukkit(chunk).markDirty();
-        }
         this.isApplied = true;
-        return hasChanges;
+
+        // When all of them complete, combine them into a single future
+        // If any changes were made to the chunk, return True as completed value
+        final CompletableFuture<Boolean> syncFuture = new CompletableFuture<Boolean>();
+        CompletableFuture.allOf(futures).thenAccept((o) -> {
+            try {
+                for (CompletableFuture<Boolean> future : futures) {
+                    if (future.get().booleanValue()) {
+                        CommonUtil.nextTick(() -> {
+                            ChunkHandle.fromBukkit(chunk).markDirty();
+                            syncFuture.complete(Boolean.TRUE);
+                        });
+                        return;
+                    }
+                }
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
+
+            // None of the futures completed true
+            CommonUtil.nextTick(() -> {
+                syncFuture.complete(Boolean.FALSE);
+            });
+        });
+        return syncFuture;
     }
 
 }

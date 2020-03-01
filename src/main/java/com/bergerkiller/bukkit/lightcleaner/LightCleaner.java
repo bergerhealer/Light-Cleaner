@@ -20,7 +20,7 @@ public class LightCleaner extends PluginBase {
 
     @Override
     public int getMinimumLibVersion() {
-        return Common.VERSION;
+        return 11404; // has backwards support
     }
 
     @Override

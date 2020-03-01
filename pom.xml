@@ -4,7 +4,7 @@
 
     <groupId>com.bergerkiller.bukkit</groupId>
     <artifactId>LightCleaner</artifactId>
-    <version>1.14.4-v1</version>
+    <version>1.15.2-v1-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>LightCleaner</name>
@@ -13,7 +13,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.serverversion>1.12-R0.1</project.serverversion>
-        <project.bkcversion>1.14.4-v1</project.bkcversion>
+        <project.bkcversion>1.15.2-v2-SNAPSHOT</project.bkcversion>
     </properties>
 
     <repositories>
@@ -73,8 +73,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>2.3.2</version>
                 <configuration>
-                    <source>1.6</source>
-                    <target>1.6</target>
+                    <source>1.8</source>
+                    <target>1.8</target>
                     <showWarnings>true</showWarnings>
                     <showDeprecation>true</showDeprecation>
                 </configuration>

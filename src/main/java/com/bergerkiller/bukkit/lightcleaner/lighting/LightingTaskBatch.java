@@ -268,10 +268,12 @@ public class LightingTaskBatch implements LightingTask {
                     }
 
                     // Save to chunk
-                    if (lc.saveToChunk(bchunk)) {
+                    lc.saveToChunk(bchunk).thenAccept((changed) -> {
                         // Chunk changed, we need to resend to players
-                        WorldUtil.queueChunkSendLight(world, lc.chunkX, lc.chunkZ);
-                    }
+                        if (changed.booleanValue()) {
+                            WorldUtil.queueChunkSendLight(world, lc.chunkX, lc.chunkZ);
+                        }
+                    });
 
                     // Closes our forced chunk, may cause the chunk to now unload
                     lc.forcedChunk.close();

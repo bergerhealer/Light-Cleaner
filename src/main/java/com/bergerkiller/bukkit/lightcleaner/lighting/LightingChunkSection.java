@@ -1,5 +1,7 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
+import java.util.concurrent.CompletableFuture;
+
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
@@ -10,30 +12,16 @@ public class LightingChunkSection {
     public final NibbleArrayHandle skyLight;
     public final NibbleArrayHandle blockLight;
     public final NibbleArrayHandle opacity;
+    private static boolean HAS_ASYNC_SET_LIGHT_METHODS = true;
 
     public LightingChunkSection(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
         this.owner = owner;
 
-        // Block light data
-        byte[] blockLightData = WorldUtil.getSectionBlockLight(owner.world,
-                owner.chunkX, chunkSection.getY(), owner.chunkZ);
-        if (blockLightData != null) {
-            this.blockLight = NibbleArrayHandle.createNew(blockLightData);
-        } else {
-            this.blockLight = NibbleArrayHandle.createNew();
-        }
+        // Block light data (is re-initialized in the fill operation below, no need to read)
+        this.blockLight = NibbleArrayHandle.createNew();
 
-        // Sky light data
-        byte[] skyLightData = WorldUtil.getSectionSkyLight(owner.world,
-                owner.chunkX, chunkSection.getY(), owner.chunkZ);
-
-        if (skyLightData != null) {
-            this.skyLight = NibbleArrayHandle.createNew(skyLightData);
-        } else if (hasSkyLight) {
-            this.skyLight = NibbleArrayHandle.createNew();
-        } else {
-            this.skyLight = null;
-        }
+        // Sky light data (is re-initialized using heightmap operation later, no need to read)
+        this.skyLight = NibbleArrayHandle.createNew();
 
         // World coordinates
         int worldX = owner.chunkX << 4;
@@ -93,10 +81,12 @@ public class LightingChunkSection {
      * Applies the lighting information to a chunk section
      *
      * @param chunkSection to save to
-     * @return True if data in the chunk section changed as a result
+     * @return future completed when saving is finished. Future resolves to False if no changes occurred, True otherwise.
      */
-    public boolean saveToChunk(ChunkSection chunkSection) {
-        boolean changed = false;
+    @SuppressWarnings("deprecation")
+    public CompletableFuture<Boolean> saveToChunk(ChunkSection chunkSection) {
+        CompletableFuture<Void> blockLightFuture = null;
+        CompletableFuture<Void> skyLightFuture = null;
 
         if (this.blockLight != null) {
             byte[] newBlockLight = this.blockLight.getData();
@@ -114,10 +104,22 @@ public class LightingChunkSection {
                 }
             }
             if (blockLightChanged) {
-                WorldUtil.setSectionBlockLight(owner.world,
-                        owner.chunkX, chunkSection.getY(), owner.chunkZ,
-                        newBlockLight);
-                changed = true;
+                if (HAS_ASYNC_SET_LIGHT_METHODS) {
+                    try {
+                        blockLightFuture = WorldUtil.setSectionBlockLightAsync(owner.world,
+                                owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                                newBlockLight);
+                    } catch (NoSuchMethodError err) {
+                        // Older version of BKCommonLib. Remove when 1.15.2-v2 is minimum
+                        HAS_ASYNC_SET_LIGHT_METHODS = false;
+                    }
+                }
+                if (!HAS_ASYNC_SET_LIGHT_METHODS) {
+                    WorldUtil.setSectionBlockLight(owner.world,
+                            owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                            newBlockLight);
+                    blockLightFuture = CompletableFuture.completedFuture(null);
+                }
             }
         }
         if (this.skyLight != null) {
@@ -136,13 +138,42 @@ public class LightingChunkSection {
                 }
             }
             if (skyLightChanged) {
-                WorldUtil.setSectionSkyLight(owner.world,
-                        owner.chunkX, chunkSection.getY(), owner.chunkZ,
-                        newSkyLight);
-                changed = true;
+                if (HAS_ASYNC_SET_LIGHT_METHODS) {
+                    try {
+                        skyLightFuture = WorldUtil.setSectionSkyLightAsync(owner.world,
+                            owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                            newSkyLight);
+                    } catch (NoSuchMethodError err) {
+                        // Older version of BKCommonLib. Remove when 1.15.2-v2 is minimum
+                        HAS_ASYNC_SET_LIGHT_METHODS = false;
+                    }
+                }
+                if (!HAS_ASYNC_SET_LIGHT_METHODS) {
+                    WorldUtil.setSectionSkyLight(owner.world,
+                            owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                            newSkyLight);
+                    skyLightFuture = CompletableFuture.completedFuture(null);
+                }
             }
         }
-        return changed;
+
+        // No updates performed
+        if (blockLightFuture == null && skyLightFuture == null) {
+            return CompletableFuture.completedFuture(Boolean.FALSE);
+        }
+
+        // Join both completable futures as one, if needed
+        CompletableFuture<Void> combined;
+        if (blockLightFuture == null) {
+            combined = skyLightFuture;
+        } else if (skyLightFuture == null) {
+            combined = blockLightFuture;
+        } else {
+            combined = CompletableFuture.allOf(blockLightFuture, skyLightFuture);
+        }
+
+        // When combined resolves, return one that returns True
+        return combined.thenApply((c) -> Boolean.TRUE);
     }
 
 }
