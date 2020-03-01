@@ -2,6 +2,7 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import java.util.concurrent.CompletableFuture;
 
+import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
@@ -128,22 +129,30 @@ public class LightingChunkSection {
                     }
                 }
             }
+
+            //TODO: Maybe do blockLightChanged check inside BKCommonLib?
             if (blockLightChanged) {
+                // Async method since BKCommonLib 1.15.2-v2
                 if (HAS_ASYNC_SET_LIGHT_METHODS) {
                     try {
                         blockLightFuture = WorldUtil.setSectionBlockLightAsync(owner.world,
                                 owner.chunkX, chunkSection.getY(), owner.chunkZ,
                                 newBlockLight);
                     } catch (NoSuchMethodError err) {
-                        // Older version of BKCommonLib. Remove when 1.15.2-v2 is minimum
                         HAS_ASYNC_SET_LIGHT_METHODS = false;
                     }
                 }
+
+                // Fallback for older BKCommonLib: schedule on main thread
                 if (!HAS_ASYNC_SET_LIGHT_METHODS) {
-                    WorldUtil.setSectionBlockLight(owner.world,
-                            owner.chunkX, chunkSection.getY(), owner.chunkZ,
-                            newBlockLight);
-                    blockLightFuture = CompletableFuture.completedFuture(null);
+                    final CompletableFuture<Void> future = new CompletableFuture<Void>();
+                    CommonUtil.nextTick(() -> {
+                        WorldUtil.setSectionBlockLight(owner.world,
+                                owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                                newBlockLight);
+                        future.complete(null);
+                    });
+                    blockLightFuture = future;
                 }
             }
         }
@@ -162,22 +171,30 @@ public class LightingChunkSection {
                     }
                 }
             }
+
+            //TODO: Maybe do skyLightChanged check inside BKCommonLib?
             if (skyLightChanged) {
+                // Async method since BKCommonLib 1.15.2-v2
                 if (HAS_ASYNC_SET_LIGHT_METHODS) {
                     try {
                         skyLightFuture = WorldUtil.setSectionSkyLightAsync(owner.world,
                             owner.chunkX, chunkSection.getY(), owner.chunkZ,
                             newSkyLight);
                     } catch (NoSuchMethodError err) {
-                        // Older version of BKCommonLib. Remove when 1.15.2-v2 is minimum
                         HAS_ASYNC_SET_LIGHT_METHODS = false;
                     }
                 }
+
+                // Fallback for older BKCommonLib: schedule on main thread
                 if (!HAS_ASYNC_SET_LIGHT_METHODS) {
-                    WorldUtil.setSectionSkyLight(owner.world,
-                            owner.chunkX, chunkSection.getY(), owner.chunkZ,
-                            newSkyLight);
-                    skyLightFuture = CompletableFuture.completedFuture(null);
+                    final CompletableFuture<Void> future = new CompletableFuture<Void>();
+                    CommonUtil.nextTick(() -> {
+                        WorldUtil.setSectionSkyLight(owner.world,
+                                owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                                newSkyLight);
+                        future.complete(null);
+                    });
+                    skyLightFuture = future;
                 }
             }
         }
