@@ -684,7 +684,7 @@ public class LightingService extends AsyncTask {
                 // Permission handling
                 if (this.getDebugMakeCorrupted()) {
                     Permission.DIRTY_DEBUG.handle(sender);
-                } else {
+                } else if (entireWorld || !Permission.CLEAN_BY_RADIUS.has(sender, Integer.toString(this.getRadius()))) {
                     Permission.CLEAN.handle(sender);
                 }
                 if (entireWorld) {
