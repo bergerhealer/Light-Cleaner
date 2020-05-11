@@ -349,7 +349,7 @@ public class LightingService extends AsyncTask {
                 }
                 // Obtain all the batches to save
                 for (LightingTask task : tasks) {
-                    if (task instanceof LightingTaskBatch && task.canSave()) {
+                    if (task instanceof LightingTaskBatch && task.canSave() && LightCleaner.isWorldSaveEnabled(task.getWorld())) {
                         batches.add((LightingTaskBatch) task);
                     }
                 }
@@ -492,7 +492,9 @@ public class LightingService extends AsyncTask {
                 }.start();
 
                 // Save the world of the current task being processed
-                WorldUtil.saveToDisk(currentTask.getWorld());
+                if (LightCleaner.isWorldSaveEnabled(currentTask.getWorld())) {
+                    WorldUtil.saveToDisk(currentTask.getWorld());
+                }
             }
             // Subtract task from the task count
             taskChunkCount -= currentTask.getChunkCount();
@@ -518,7 +520,9 @@ public class LightingService extends AsyncTask {
             // Save all worlds: memory after garbage collecting is still too high
             LightCleaner.plugin.log(Level.WARNING, "Saving all worlds to free some memory...");
             for (World world : WorldUtil.getWorlds()) {
-                WorldUtil.saveToDisk(world);
+                if (LightCleaner.isWorldSaveEnabled(world)) {
+                    WorldUtil.saveToDisk(world);
+                }
             }
             runtime.gc();
             long free = runtime.freeMemory();

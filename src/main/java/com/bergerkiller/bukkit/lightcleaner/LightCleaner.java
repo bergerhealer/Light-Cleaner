@@ -1,8 +1,12 @@
 package com.bergerkiller.bukkit.lightcleaner;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.logging.Level;
 
 import org.bukkit.ChatColor;
+import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
@@ -16,6 +20,11 @@ public class LightCleaner extends PluginBase {
     public static long minFreeMemory = 100 * 1024 * 1024;
     public static boolean autoCleanEnabled = false;
     public static int asyncLoadConcurrency = 50;
+    public static Set<String> unsavedWorldNames = new HashSet<String>();
+
+    public static boolean isWorldSaveEnabled(World world) {
+        return !unsavedWorldNames.contains(world.getName());
+    }
 
     @Override
     public int getMinimumLibVersion() {
@@ -59,6 +68,12 @@ public class LightCleaner extends PluginBase {
         config.setHeader("asyncLoadConcurrency", "\nHow many chunks are asynchronously loaded at the same time");
         config.addHeader("asyncLoadConcurrency", "Setting this value too high may overflow the internal queues. Too low and it will idle too much.");
         asyncLoadConcurrency = config.get("asyncLoadConcurrency", 50);
+
+        config.setHeader("unsavedWorldNames", "\nA list of world names that have saving disabled");
+        config.addHeader("unsavedWorldNames", "Light Cleaner will not save these worlds to free up memory,");
+        config.addHeader("unsavedWorldNames", "and will not write persistent PendingLight.dat entries for these worlds");
+        unsavedWorldNames.clear();
+        unsavedWorldNames.addAll(config.getList("unsavedWorldNames", String.class, Arrays.asList("dummyUnsavedWorldName")));
 
         config.save();
 
