@@ -23,7 +23,11 @@ public class LightingChunkSection {
             this.blockLight = NibbleArrayHandle.createNew();
 
             // Sky light data (is re-initialized using heightmap operation later, no need to read)
-            this.skyLight = NibbleArrayHandle.createNew();
+            if (hasSkyLight) {
+                this.skyLight = NibbleArrayHandle.createNew();
+            } else {
+                this.skyLight = null;
+            }
         } else {
             // We need to load the original light data, because we have a border that we do not update
 
@@ -37,13 +41,14 @@ public class LightingChunkSection {
             }
 
             // Sky light data
-            byte[] skyLightData = WorldUtil.getSectionSkyLight(owner.world,
-                    owner.chunkX, chunkSection.getY(), owner.chunkZ);
-
-            if (skyLightData != null) {
-                this.skyLight = NibbleArrayHandle.createNew(skyLightData);
-            } else if (hasSkyLight) {
-                this.skyLight = NibbleArrayHandle.createNew();
+            if (hasSkyLight) {
+                byte[] skyLightData = WorldUtil.getSectionSkyLight(owner.world,
+                        owner.chunkX, chunkSection.getY(), owner.chunkZ);
+                if (skyLightData != null) {
+                    this.skyLight = NibbleArrayHandle.createNew(skyLightData);
+                } else {
+                    this.skyLight = NibbleArrayHandle.createNew();
+                }
             } else {
                 this.skyLight = null;
             }
