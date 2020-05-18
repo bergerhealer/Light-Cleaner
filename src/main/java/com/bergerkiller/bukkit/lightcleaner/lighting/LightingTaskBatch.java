@@ -183,8 +183,13 @@ public class LightingTaskBatch implements LightingTask {
                 asyncLoad.thenAccept(new Consumer<Chunk>() {
                     @Override
                     public void accept(Chunk chunk) {
-                        if (!LightingTaskBatch.this.aborted) {
-                            lc.fill(chunk);
+                        try {
+                            if (!LightingTaskBatch.this.aborted) {
+                                lc.fill(chunk);
+                            }
+                        } catch (Throwable t) {
+                            LightCleaner.plugin.getLogger().log(Level.SEVERE, "Failed to fill chunk [" + chunk.getX() + "/" + chunk.getZ() + "]", t);
+                            abort();
                         }
                         lc.isChunkLoading = false;
                     }
