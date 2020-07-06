@@ -10,6 +10,7 @@ import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import com.bergerkiller.bukkit.common.Common;
 import com.bergerkiller.bukkit.common.PluginBase;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
@@ -28,7 +29,7 @@ public class LightCleaner extends PluginBase {
 
     @Override
     public int getMinimumLibVersion() {
-        return 11404; // has backwards support
+        return Common.VERSION;
     }
 
     @Override

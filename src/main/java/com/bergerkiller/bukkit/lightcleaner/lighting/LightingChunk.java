@@ -3,6 +3,7 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.chunk.ForcedChunk;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
+import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.common.wrappers.HeightMap;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
@@ -79,7 +80,7 @@ public class LightingChunk {
 
     public void fill(Chunk chunk) {
         // Fill using chunk sections
-        hasSkyLight = WorldHandle.fromBukkit(chunk.getWorld()).getWorldProvider().hasSkyLight();
+        hasSkyLight = WorldUtil.getDimensionType(chunk.getWorld()).hasSkyLight();
         ChunkSection[] chunkSections = ChunkUtil.getSections(chunk);
         for (int section = 0; section < SECTION_COUNT; section++) {
             ChunkSection chunkSection = chunkSections[section];
