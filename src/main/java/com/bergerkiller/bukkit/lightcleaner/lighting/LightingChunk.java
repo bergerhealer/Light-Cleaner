@@ -9,7 +9,6 @@ import com.bergerkiller.bukkit.common.wrappers.HeightMap;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
 import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
-import com.bergerkiller.generated.net.minecraft.server.WorldHandle;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;

@@ -9,11 +9,13 @@ import org.bukkit.ChatColor;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 
 import com.bergerkiller.bukkit.common.Common;
 import com.bergerkiller.bukkit.common.PluginBase;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
+import com.bergerkiller.bukkit.lightcleaner.impl.Handler;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
 
 public class LightCleaner extends PluginBase {
@@ -22,6 +24,8 @@ public class LightCleaner extends PluginBase {
     public static boolean autoCleanEnabled = false;
     public static int asyncLoadConcurrency = 50;
     public static Set<String> unsavedWorldNames = new HashSet<String>();
+    private boolean worldEditHandlerEnabled = false;
+    private Handler worldEditHandler = null;
 
     public static boolean isWorldSaveEnabled(World world) {
         return !unsavedWorldNames.contains(world.getName());
@@ -66,6 +70,10 @@ public class LightCleaner extends PluginBase {
         config.addHeader("autoCleanEnabled", "This will eliminate dark shadows during world generation");
         autoCleanEnabled = config.get("autoCleanEnabled", false);
 
+        config.setHeader("autoCleanWorldEditEnabled", "\nSets whether lighting is cleaned up when players perform WorldEdit operations");
+        config.addHeader("autoCleanWorldEditEnabled", "This is primarily useful for FastAsyncWorldEdit");
+        worldEditHandlerEnabled = config.get("autoCleanWorldEditEnabled", false);
+
         config.setHeader("asyncLoadConcurrency", "\nHow many chunks are asynchronously loaded at the same time");
         config.addHeader("asyncLoadConcurrency", "Setting this value too high may overflow the internal queues. Too low and it will idle too much.");
         asyncLoadConcurrency = config.get("asyncLoadConcurrency", 50);
@@ -86,6 +94,25 @@ public class LightCleaner extends PluginBase {
         LightingService.abort();
 
         plugin = null;
+    }
+
+    @Override
+    public void updateDependency(Plugin plugin, String pluginName, boolean enabled) {
+        if (worldEditHandlerEnabled && pluginName.equals("WorldEdit")) {
+            if (enabled && worldEditHandler == null) {
+                try {
+                    Class.forName("com.boydti.fawe.beta.IBatchProcessor");
+                    worldEditHandler = new com.bergerkiller.bukkit.lightcleaner.impl.FastAsyncWorldEditHandler();
+                } catch (ClassNotFoundException ex) {
+                    worldEditHandler = new com.bergerkiller.bukkit.lightcleaner.impl.WorldEditHandler();
+                }
+                worldEditHandler.enable(this);
+            } else if (!enabled && worldEditHandler != null) {
+                worldEditHandler.disable(this);
+                worldEditHandler = null;
+                log(Level.INFO, "WorldEdit was disabled, support for automatic light cleaning turned off");
+            }
+        }
     }
 
     @Override

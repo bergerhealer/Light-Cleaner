@@ -59,7 +59,19 @@ public class LightingAutoClean {
         }
     }
 
+    private static synchronized void processAutoClean() {
+        while (queues.size() > 0) {
+            World world = queues.keySet().iterator().next();
+            LongHashSet chunks = queues.remove(world);
+            LightingService.schedule(world, chunks);
+        }
+    }
+
     public static void schedule(World world, int chunkX, int chunkZ) {
+        schedule(world, chunkX, chunkZ, 80);
+    }
+
+    public static synchronized void schedule(World world, int chunkX, int chunkZ, int tickDelay) {
         LongHashSet queue = queues.get(world);
         if (queue == null) {
             queue = new LongHashSet(9);
@@ -78,18 +90,14 @@ public class LightingAutoClean {
             autoCleanTask = new Task(LightCleaner.plugin) {
                 @Override
                 public void run() {
-                    while (queues.size() > 0) {
-                        World world = queues.keySet().iterator().next();
-                        LongHashSet chunks = queues.remove(world);
-                        LightingService.schedule(world, chunks);
-                    }
+                    processAutoClean();
                 }
             };
         }
 
         // Postpone the tick task while there are less than 100 chunks in the queue
         if (queue.size() < 100) {
-            autoCleanTask.stop().start(80);
+            autoCleanTask.stop().start(tickDelay);
         }
     }
 }

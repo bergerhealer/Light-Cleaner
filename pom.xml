@@ -12,7 +12,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.serverversion>1.12-R0.1</project.serverversion>
+        <project.serverversion>1.16.1-R0.1</project.serverversion>
         <project.bkcversion>1.16.1-v1-SNAPSHOT</project.bkcversion>
     </properties>
 
@@ -27,6 +27,12 @@
         <repository>
             <id>MG-Dev Jenkins CI Maven Repository</id>
             <url>https://ci.mg-dev.eu/plugin/repository/everything</url>
+        </repository>
+
+        <!-- FAWE -->
+        <repository>
+            <id>IntellectualSites</id>
+            <url>https://mvn.intellectualsites.com/content/repositories/releases/</url>
         </repository>
     </repositories>
 
@@ -47,6 +53,15 @@
             <artifactId>junit</artifactId>
             <version>3.8.1</version>
             <scope>test</scope>
+        </dependency>
+
+        <!-- FAWE API -->
+        <dependency>
+            <groupId>com.intellectualsites.fawe</groupId>
+            <artifactId>FAWE-Bukkit</artifactId>
+            <version>1.0.0</version>
+            <scope>provided</scope>
+            <optional>true</optional>
         </dependency>
     </dependencies>
 

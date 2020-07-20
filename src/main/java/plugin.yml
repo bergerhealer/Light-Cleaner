@@ -4,6 +4,7 @@ api-version: 1.13
 version: ${project.version}
 authors: [bergerkiller]
 depend: [BKCommonLib]
+softdepend: [WorldEdit]
 description: Cleans up bugged lighting in chunks or entire worlds
 dev-url: ${project.url}
 commands:

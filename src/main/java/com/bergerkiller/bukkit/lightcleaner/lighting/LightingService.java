@@ -646,6 +646,33 @@ public class LightingService extends AsyncTask {
             return this.setChunks(chunks_hashset);
         }
 
+        /**
+         * Sets the chunks to a cuboid area of chunks.
+         * Make sure the minimum chunk coordinates are less or equal to
+         * the maximum chunk coordinates.
+         * 
+         * @param minChunkX Minimum chunk x-coordinate (inclusive)
+         * @param minChunkZ Minimum chunk z-coordinate (inclusive)
+         * @param maxChunkX Maximum chunk x-coordinate (inclusive)
+         * @param maxChunkZ Maximum chunk z-coordinate (inclusive)
+         * @return this
+         */
+        public ScheduleArguments setChunkFromTo(int minChunkX, int minChunkZ, int maxChunkX, int maxChunkZ) {
+            int num_dx = (maxChunkX - minChunkX) + 1;
+            int num_dz = (maxChunkZ - minChunkZ) + 1;
+            if (num_dx <= 0 || num_dz <= 0) {
+                return this.setChunks(new LongHashSet()); // nothing
+            }
+
+            LongHashSet chunks_hashset = new LongHashSet(num_dx * num_dz);
+            for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+                for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                    chunks_hashset.add(chunkX, chunkZ);
+                }
+            }
+            return this.setChunks(chunks_hashset);
+        }
+
         public ScheduleArguments setChunks(Collection<IntVector2> chunks) {
             LongHashSet chunks_hashset = new LongHashSet(chunks.size());
             for (IntVector2 coord : chunks) {
@@ -764,6 +791,15 @@ public class LightingService extends AsyncTask {
             }
 
             return true;
+        }
+
+        /**
+         * Creates a new ScheduleArguments instance ready to be configured
+         * 
+         * @return args
+         */
+        public static ScheduleArguments create() {
+            return new ScheduleArguments();
         }
     }
 }
