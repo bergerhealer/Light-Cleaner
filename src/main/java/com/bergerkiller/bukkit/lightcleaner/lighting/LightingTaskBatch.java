@@ -27,10 +27,11 @@ public class LightingTaskBatch implements LightingTask {
     private static boolean DEBUG_LOG = false; // logs performance stats
     public final World world;
     private final Object chunks_lock = new Object();
-    private LightingChunk[] chunks = null;
-    private long[] chunks_coords;
+    private volatile LightingChunk[] chunks = null;
+    private volatile long[] chunks_coords;
     private boolean done = false;
     private boolean aborted = false;
+    private volatile long timeStarted = 0;
     private LightingService.ScheduleArguments options = new LightingService.ScheduleArguments();
 
     public LightingTaskBatch(World world, long[] chunkCoordinates) {
@@ -83,6 +84,11 @@ public class LightingTaskBatch implements LightingTask {
     }
 
     @Override
+    public long getTimeStarted() {
+        return this.timeStarted;
+    }
+
+    @Override
     public String getStatus() {
         int count = 0;
         long cx = 0;
@@ -111,6 +117,9 @@ public class LightingTaskBatch implements LightingTask {
 
     @Override
     public void process() {
+        // Begin
+        this.timeStarted = System.currentTimeMillis();
+
         // Initialize lighting chunks
         synchronized (this.chunks_lock) {
             LightingChunk[] chunks_new = new LightingChunk[this.chunks_coords.length];

@@ -101,6 +101,17 @@ public class LightingService extends AsyncTask {
     }
 
     /**
+     * Gets the time the currently processing task was started. If no task is being processed,
+     * an empty result is returned. If processing didn't start yet, the value will be 0.
+     * 
+     * @return time when the current task was started
+     */
+    public static java.util.OptionalLong getCurrentStartTime() {
+        final LightingTask current = currentTask;
+        return (current == null) ? java.util.OptionalLong.empty() : OptionalLong.of(current.getTimeStarted());
+    }
+
+    /**
      * Adds a player who will be notified of the lighting operations being completed
      *
      * @param player to add, null for console

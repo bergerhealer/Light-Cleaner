@@ -17,6 +17,7 @@ public class LightingTaskWorld implements LightingTask {
     private volatile RegionInfoMap regions = null;
     private volatile int regionCountLoaded;
     private volatile int chunkCount;
+    private volatile long timeStarted;
     private volatile boolean aborted;
     private LightingService.ScheduleArguments options = new LightingService.ScheduleArguments();
 
@@ -25,6 +26,7 @@ public class LightingTaskWorld implements LightingTask {
         this.regionCountLoaded = 0;
         this.aborted = false;
         this.chunkCount = 0;
+        this.timeStarted = 0;
     }
 
     @Override
@@ -35,6 +37,11 @@ public class LightingTaskWorld implements LightingTask {
     @Override
     public int getChunkCount() {
         return chunkCount;
+    }
+
+    @Override
+    public long getTimeStarted() {
+        return this.timeStarted;
     }
 
     @Override
@@ -50,6 +57,7 @@ public class LightingTaskWorld implements LightingTask {
     public void process() {
         // Load regions on the main thread
         // TODO: Can use main thread executor instead
+        this.timeStarted = System.currentTimeMillis();
         final CompletableFuture<Void> regionsLoadedFuture = new CompletableFuture<Void>();
         CommonUtil.nextTick(() -> {
             try {
@@ -149,5 +157,4 @@ public class LightingTaskWorld implements LightingTask {
     public boolean canSave() {
         return false;
     }
-
 }

@@ -30,6 +30,14 @@ public interface LightingTask {
     String getStatus();
 
     /**
+     * Gets the timestamp (milliseconds since epoch) when this task was first started.
+     * If 0 is returned, then the task wasn't started yet.
+     * 
+     * @return time this task was started
+     */
+    long getTimeStarted();
+
+    /**
      * Processes this task (called from another thread!)
      */
     void process();

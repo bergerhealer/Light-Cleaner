@@ -161,7 +161,23 @@ public class LightCleaner extends PluginBase {
                     } else {
                         sender.sendMessage(ChatColor.YELLOW + "Lighting is being cleaned, " + ChatColor.RED + LightingService.getChunkFaults() +
                                 " " + ChatColor.YELLOW + "chunks remaining");
-                        sender.sendMessage(ChatColor.YELLOW + "Current: " + ChatColor.GREEN + LightingService.getCurrentStatus());
+
+                        String message = ChatColor.YELLOW + "Current: " + ChatColor.GREEN + LightingService.getCurrentStatus();
+                        java.util.OptionalLong startTime = LightingService.getCurrentStartTime();
+                        if (startTime.isPresent()) {
+                            long time = startTime.getAsLong();
+                            if (time != 0) {
+                                time = System.currentTimeMillis() - time;
+                            }
+                            if (time == 0) {
+                                message += ChatColor.YELLOW + " (Starting...)";
+                            } else if (time > (60*60*1000)) {
+                                message += ChatColor.RED + " (>1h)";
+                            } else if (time > 60000) {
+                                message += ChatColor.RED + " (" + (time/60000) + "m)";
+                            }
+                        }
+                        sender.sendMessage(message);
                     }
                 } else {
                     sender.sendMessage(ChatColor.GREEN + "No lighting is being processed at this time.");
