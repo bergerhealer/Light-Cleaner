@@ -13,7 +13,6 @@ public class LightingChunkSection {
     public final NibbleArrayHandle skyLight;
     public final NibbleArrayHandle blockLight;
     public final NibbleArrayHandle opacity;
-    private static boolean HAS_ASYNC_SET_LIGHT_METHODS = true;
 
     public LightingChunkSection(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
         this.owner = owner;
@@ -137,28 +136,9 @@ public class LightingChunkSection {
 
             //TODO: Maybe do blockLightChanged check inside BKCommonLib?
             if (blockLightChanged) {
-                // Async method since BKCommonLib 1.15.2-v2
-                if (HAS_ASYNC_SET_LIGHT_METHODS) {
-                    try {
-                        blockLightFuture = WorldUtil.setSectionBlockLightAsync(owner.world,
-                                owner.chunkX, chunkSection.getY(), owner.chunkZ,
-                                newBlockLight);
-                    } catch (NoSuchMethodError err) {
-                        HAS_ASYNC_SET_LIGHT_METHODS = false;
-                    }
-                }
-
-                // Fallback for older BKCommonLib: schedule on main thread
-                if (!HAS_ASYNC_SET_LIGHT_METHODS) {
-                    final CompletableFuture<Void> future = new CompletableFuture<Void>();
-                    CommonUtil.nextTick(() -> {
-                        WorldUtil.setSectionBlockLight(owner.world,
-                                owner.chunkX, chunkSection.getY(), owner.chunkZ,
-                                newBlockLight);
-                        future.complete(null);
-                    });
-                    blockLightFuture = future;
-                }
+                blockLightFuture = WorldUtil.setSectionBlockLightAsync(owner.world,
+                        owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                        newBlockLight);
             }
         }
         if (this.skyLight != null) {
@@ -179,28 +159,9 @@ public class LightingChunkSection {
 
             //TODO: Maybe do skyLightChanged check inside BKCommonLib?
             if (skyLightChanged) {
-                // Async method since BKCommonLib 1.15.2-v2
-                if (HAS_ASYNC_SET_LIGHT_METHODS) {
-                    try {
-                        skyLightFuture = WorldUtil.setSectionSkyLightAsync(owner.world,
-                            owner.chunkX, chunkSection.getY(), owner.chunkZ,
-                            newSkyLight);
-                    } catch (NoSuchMethodError err) {
-                        HAS_ASYNC_SET_LIGHT_METHODS = false;
-                    }
-                }
-
-                // Fallback for older BKCommonLib: schedule on main thread
-                if (!HAS_ASYNC_SET_LIGHT_METHODS) {
-                    final CompletableFuture<Void> future = new CompletableFuture<Void>();
-                    CommonUtil.nextTick(() -> {
-                        WorldUtil.setSectionSkyLight(owner.world,
-                                owner.chunkX, chunkSection.getY(), owner.chunkZ,
-                                newSkyLight);
-                        future.complete(null);
-                    });
-                    skyLightFuture = future;
-                }
+                skyLightFuture = WorldUtil.setSectionSkyLightAsync(owner.world,
+                        owner.chunkX, chunkSection.getY(), owner.chunkZ,
+                        newSkyLight);
             }
         }
 
