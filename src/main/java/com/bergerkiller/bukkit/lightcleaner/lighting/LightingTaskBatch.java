@@ -88,31 +88,63 @@ public class LightingTaskBatch implements LightingTask {
         return this.timeStarted;
     }
 
-    @Override
-    public String getStatus() {
+    private static final class BatchChunkInfo {
+        public final int cx;
+        public final int cz;
+        public final int count;
+
+        public BatchChunkInfo(int cx, int cz, int count) {
+            this.cx = cx;
+            this.cz = cz;
+            this.count = count;
+        }
+    }
+
+    public BatchChunkInfo getAverageChunk() {
         int count = 0;
         long cx = 0;
         long cz = 0;
         synchronized (this.chunks_lock) {
-            if (this.chunks == null) {
+            if (this.chunks != null) {
+                count = this.chunks.length;
+                for (LightingChunk chunk : this.chunks) {
+                    cx += chunk.chunkX;
+                    cz += chunk.chunkZ;
+                }
+            } else if (this.chunks_coords != null) {
                 count = this.chunks_coords.length;
                 for (long chunk : this.chunks_coords) {
                     cx += MathUtil.longHashMsw(chunk);
                     cz += MathUtil.longHashLsw(chunk);
                 }
             } else {
-                count = this.chunks.length;
-                for (LightingChunk chunk : this.chunks) {
-                    cx += chunk.chunkX;
-                    cz += chunk.chunkZ;
-                }
+                return null;
             }
         }
         if (count > 0) {
             cx /= count;
             cz /= count;
         }
-        return "Cleaning " + count + " chunks near x=" + (cx*16) + " z=" + (cz*16);
+        return new BatchChunkInfo((int) cx, (int) cz, count);
+    }
+
+    @Override
+    public String getStatus() {
+        BatchChunkInfo chunk = this.getAverageChunk();
+        if (chunk != null) {
+            return "Cleaning " + chunk.count + " chunks near x=" + (chunk.cx*16) + " z=" + (chunk.cz*16);
+        } else {
+            return done ? "Done" : "No Data";
+        }
+    }
+
+    private String getShortStatus() {
+        BatchChunkInfo chunk = this.getAverageChunk();
+        if (chunk != null) {
+            return "[x=" + (chunk.cx*16) + " z=" + (chunk.cz*16) + " count=" + chunk.count + "]";
+        } else {
+            return "[Unknown]";
+        }
     }
 
     @Override
@@ -225,9 +257,15 @@ public class LightingTaskBatch implements LightingTask {
 
         // Apply and wait for it to be finished
         // Wait in 200ms intervals to allow for aborting
+        // After 2 minutes of inactivity, stop waiting and consider applying failed
         try {
             CompletableFuture<Void> future = apply();
+            int max_num_of_waits = (5*120);
             while (true) {
+                if (--max_num_of_waits == 0) {
+                    LightCleaner.plugin.getLogger().log(Level.WARNING, "Failed to apply lighting data for " + getShortStatus() + ": Timeout");
+                    break;
+                }
                 try {
                     future.get(200, TimeUnit.MILLISECONDS);
                     break;
@@ -240,7 +278,7 @@ public class LightingTaskBatch implements LightingTask {
         } catch (InterruptedException e) {
             // Ignore
         } catch (ExecutionException e) {
-            LightCleaner.plugin.getLogger().log(Level.SEVERE, "Failed to apply lighting data", e.getCause());
+            LightCleaner.plugin.getLogger().log(Level.SEVERE, "Failed to apply lighting data for " + getShortStatus(), e.getCause());
         }
 
         this.done = true;
@@ -270,19 +308,19 @@ public class LightingTaskBatch implements LightingTask {
      * This is done in several ticks on the main thread.
      * The completable future is resolved when applying is finished.
      */
-    @SuppressWarnings("unchecked")
     public CompletableFuture<Void> apply() {
         // Apply data to chunks and unload if needed
         LightingChunk[] chunks = LightingTaskBatch.this.chunks;
-        CompletableFuture<Void>[] applyFutures = new CompletableFuture[chunks.length];
+        CompletableFuture<?>[] applyFutures = new CompletableFuture[chunks.length];
         for (int i = 0; i < chunks.length; i++) {
             LightingChunk lc = chunks[i];
             Chunk bchunk = lc.forcedChunk.getChunk();
 
             // Save to chunk
-            applyFutures[i] = lc.saveToChunk(bchunk).thenAccept((changed) -> {
-                // Chunk changed, we need to resend to players
-                if (changed.booleanValue()) {
+            applyFutures[i] = lc.saveToChunk(bchunk).whenComplete((changed, t) -> {
+                if (t != null) {
+                    t.printStackTrace();
+                } else if (changed.booleanValue()) {
                     WorldUtil.queueChunkSendLight(world, lc.chunkX, lc.chunkZ);
                 }
 
