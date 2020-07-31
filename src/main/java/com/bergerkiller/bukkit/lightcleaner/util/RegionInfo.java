@@ -64,6 +64,20 @@ public class RegionInfo {
     }
 
     /**
+     * Gets whether the chunk coordinates specified are within the range
+     * of coordinates of this region
+     * 
+     * @param cx - chunk coordinates (world coordinates)
+     * @param cz - chunk coordinates (world coordinates)
+     * @return True if in range
+     */
+    public boolean isInRange(int cx, int cz) {
+        cx -= this.cx;
+        cz -= this.cz;
+        return cx >= 0 && cz >= 0 && cx < 32 && cz < 32;
+    }
+
+    /**
      * Gets whether a chunk is contained and exists inside this region
      * 
      * @param cx - chunk coordinates (world coordinates)

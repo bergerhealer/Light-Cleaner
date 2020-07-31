@@ -192,6 +192,28 @@ public class LightingService extends AsyncTask {
                         chunks_filtered.add(chunk);
                     }
                 }
+            } else if (LightCleaner.skipWorldEdge) {
+                // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
+                // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
+                // To check for border chunks, we check that all 9 chunks are are available
+                Map<IntVector2, Boolean> tmp = new HashMap<>();
+                while (iter.hasNext()) {
+                    long chunk = iter.next();
+                    int cx = MathUtil.longHashMsw(chunk);
+                    int cz = MathUtil.longHashLsw(chunk);
+
+                    boolean fully_loaded = true;
+                    for (int dx = -LightCleaner.WORLD_EDGE; dx <= LightCleaner.WORLD_EDGE && fully_loaded; dx++) {
+                        for (int dz = -LightCleaner.WORLD_EDGE; dz <= LightCleaner.WORLD_EDGE && fully_loaded; dz++) {
+                            IntVector2 pos = new IntVector2(cx + dx, cz + dz);
+                            fully_loaded &= tmp.computeIfAbsent(pos, p -> WorldUtil.isChunkAvailable(args.getWorld(), p.x, p.z)).booleanValue();
+                        }
+                    }
+
+                    if (fully_loaded) {
+                        chunks_filtered.add(chunk);
+                    }
+                }
             } else {
                 // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
                 // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
@@ -239,20 +261,23 @@ public class LightingService extends AsyncTask {
             // Collect all chunks to process for this region.
             // This is an union of the 34x34 area of chunks and the region file data set
             LongHashSet buffer = new LongHashSet();
-            int dx, dz;
-            for (dx = -1; dx < 33; dx++) {
-                for (dz = -1; dz < 33; dz++) {
-                    int cx = region.cx + dx;
-                    int cz = region.cz + dz;
+            int rdx, rdz;
+            for (rdx = -1; rdx < 33; rdx++) {
+                for (rdz = -1; rdz < 33; rdz++) {
+                    int cx = region.cx + rdx;
+                    int cz = region.cz + rdz;
                     long chunk_key = MathUtil.longHashToLong(cx, cz);
                     if (!chunks.contains(chunk_key)) {
                         continue;
                     }
-                    if (dx >= 0 && dz >= 0 && dx < 32 && dz < 32) {
-                        if (!region.containsChunk(cx, cz)) {
+
+                    if (LightCleaner.skipWorldEdge) {
+                        // Check the chunk and the surrounding chunks are all present
+                        if (!regions.containsChunkAndNeighbours(cx, cz)) {
                             continue;
                         }
                     } else {
+                        // Only check chunk
                         if (!regions.containsChunk(cx, cz)) {
                             continue;
                         }
@@ -413,6 +438,7 @@ public class LightingService extends AsyncTask {
         }
         currentTask = null;
         taskChunkCount = 0;
+        LightingForcedChunkCache.reset();
     }
 
     /**
@@ -489,6 +515,7 @@ public class LightingService extends AsyncTask {
             // Stop task and abort
             taskCounter = 0;
             setProcessing(false);
+            LightingForcedChunkCache.reset();
             savePendingBatches();
             return;
         } else {

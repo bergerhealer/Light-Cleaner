@@ -9,6 +9,7 @@ import org.bukkit.World;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashMap;
+import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 
 /**
  * A map of region information
@@ -48,6 +49,36 @@ public class RegionInfoMap {
     public boolean containsChunk(int cx, int cz) {
         RegionInfo region = getRegion(cx, cz);
         return region != null && region.containsChunk(cx, cz);
+    }
+
+    /**
+     * Gets whether a chunk, and all its 8 neighbours, exist
+     * 
+     * @param cx
+     * @param cz
+     * @return True if the chunk and all its neighbours exist
+     */
+    public boolean containsChunkAndNeighbours(int cx, int cz) {
+        RegionInfo region = getRegion(cx, cz);
+        if (region == null) {
+            return false;
+        }
+        for (int dx = -LightCleaner.WORLD_EDGE; dx <= LightCleaner.WORLD_EDGE; dx++) {
+            for (int dz = -LightCleaner.WORLD_EDGE; dz <= LightCleaner.WORLD_EDGE; dz++) {
+                int mx = cx + dx;
+                int mz = cz + dz;
+                if (region.isInRange(mx, mz)) {
+                    if (!region.containsChunk(mx, mz)) {
+                        return false;
+                    }
+                } else {
+                    if (!this.containsChunk(mx, mz)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     /**

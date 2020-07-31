@@ -2,6 +2,7 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
+import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
 import com.bergerkiller.bukkit.lightcleaner.util.RegionInfo;
 import com.bergerkiller.bukkit.lightcleaner.util.RegionInfoMap;
@@ -124,13 +125,26 @@ public class LightingTaskWorld implements LightingTask {
             // Reduce count, schedule and clear the buffer
             // Put the coordinates that are available
             final LongHashSet buffer = new LongHashSet(34*34);
-            int dx, dz;
-            for (dx = -1; dx < 33; dx++) {
-                for (dz = -1; dz < 33; dz++) {
-                    int cx = region.cx + dx;
-                    int cz = region.cz + dz;
-                    if (this.regions.containsChunk(cx, cz)) {
-                        buffer.add(cx, cz);
+            if (LightCleaner.skipWorldEdge) {
+                int dx, dz;
+                for (dx = -1; dx < 33; dx++) {
+                    for (dz = -1; dz < 33; dz++) {
+                        int cx = region.cx + dx;
+                        int cz = region.cz + dz;
+                        if (this.regions.containsChunkAndNeighbours(cx, cz)) {
+                            buffer.add(cx, cz);
+                        }
+                    }
+                }
+            } else {
+                int dx, dz;
+                for (dx = -1; dx < 33; dx++) {
+                    for (dz = -1; dz < 33; dz++) {
+                        int cx = region.cx + dx;
+                        int cz = region.cz + dz;
+                        if (this.regions.containsChunk(cx, cz)) {
+                            buffer.add(cx, cz);
+                        }
                     }
                 }
             }

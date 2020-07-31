@@ -23,6 +23,8 @@ public class LightCleaner extends PluginBase {
     public static long minFreeMemory = 100 * 1024 * 1024;
     public static boolean autoCleanEnabled = false;
     public static int asyncLoadConcurrency = 50;
+    public static boolean skipWorldEdge = true;
+    public static final int WORLD_EDGE = 2;
     public static Set<String> unsavedWorldNames = new HashSet<String>();
     private boolean worldEditHandlerEnabled = false;
     private Handler worldEditHandler = null;
@@ -65,6 +67,12 @@ public class LightCleaner extends PluginBase {
             log(Level.WARNING, "It is recommended to correct this in the config.yml of Light Cleaner, or risk out of memory errors");
         }
         minFreeMemory = (long) (1024 * 1024) * (long) minFreeMemOption;
+
+        // Skips chunks at the edge of the world, that if cleaned, would cause more chunks to generate
+        config.setHeader("skipWorldEdge", "\nWhether to skip processing chunks at the edge of the world");
+        config.addHeader("skipWorldEdge", "Setting this to true prevents additional chunks being generated there");
+        config.addHeader("skipWorldEdge", "This does mean the border chunks do not get cleaned");
+        skipWorldEdge = config.get("skipWorldEdge", true);
 
         config.setHeader("autoCleanEnabled", "\nSets whether lighting is cleaned up for newly generated chunks");
         config.addHeader("autoCleanEnabled", "This will eliminate dark shadows during world generation");
