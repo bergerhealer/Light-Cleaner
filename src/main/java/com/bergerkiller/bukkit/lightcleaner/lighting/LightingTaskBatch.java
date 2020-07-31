@@ -32,6 +32,7 @@ public class LightingTaskBatch implements LightingTask {
     private boolean done = false;
     private boolean aborted = false;
     private volatile long timeStarted = 0;
+    private volatile Stage stage = Stage.LOADING;
     private LightingService.ScheduleArguments options = new LightingService.ScheduleArguments();
 
     public LightingTaskBatch(World world, long[] chunkCoordinates) {
@@ -132,6 +133,34 @@ public class LightingTaskBatch implements LightingTask {
     public String getStatus() {
         BatchChunkInfo chunk = this.getAverageChunk();
         if (chunk != null) {
+            if (this.stage == stage.LOADING) {
+                synchronized (this.chunks_lock) {
+                    if (this.chunks != null) {
+                        int num_remaining = chunk.count;
+                        for (LightingChunk lc : this.chunks) {
+                            if (lc.isFilled) {
+                                num_remaining--;
+                            }
+                        }
+                        return "Loading " + num_remaining + "/" + chunk.count + " chunks near " +
+                                "x=" + (chunk.cx*16) + " z=" + (chunk.cz*16);
+                    }
+                }
+            } else if (this.stage == stage.APPLYING) {
+                synchronized (this.chunks_lock) {
+                    if (this.chunks != null) {
+                        int num_remaining = chunk.count;
+                        for (LightingChunk lc : this.chunks) {
+                            if (lc.isApplied) {
+                                num_remaining--;
+                            }
+                        }
+                        return "Saving " + num_remaining + "/" + chunk.count + " chunks near " +
+                                "x=" + (chunk.cx*16) + " z=" + (chunk.cz*16);
+                    }
+                }
+            }
+
             return "Cleaning " + chunk.count + " chunks near x=" + (chunk.cx*16) + " z=" + (chunk.cz*16);
         } else {
             return done ? "Done" : "No Data";
@@ -248,6 +277,7 @@ public class LightingTaskBatch implements LightingTask {
                 return;
             }
         } while (!isFullyLoaded);
+        this.stage = Stage.FIXING;
 
         // Fix
         fix();
@@ -258,6 +288,7 @@ public class LightingTaskBatch implements LightingTask {
         // Apply and wait for it to be finished
         // Wait in 200ms intervals to allow for aborting
         // After 2 minutes of inactivity, stop waiting and consider applying failed
+        this.stage = stage.APPLYING;
         try {
             CompletableFuture<Void> future = apply();
             int max_num_of_waits = (5*120);
@@ -375,5 +406,9 @@ public class LightingTaskBatch implements LightingTask {
     @Override
     public boolean canSave() {
         return !this.options.getLoadedChunksOnly() && !this.options.getDebugMakeCorrupted();
+    }
+
+    private static enum Stage {
+        LOADING, FIXING, APPLYING
     }
 }

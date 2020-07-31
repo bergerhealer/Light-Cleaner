@@ -40,6 +40,7 @@ public class LightingChunk {
     public boolean isSkyLightDirty = true;
     public boolean isBlockLightDirty = true;
     public boolean isFilled = false;
+    public boolean isApplied = false;
     public boolean isChunkLoading = false;
     public IntVector2 start = new IntVector2(1, 1);
     public IntVector2 end = new IntVector2(14, 14);
@@ -387,6 +388,8 @@ public class LightingChunk {
         // When all of them complete, combine them into a single future
         // If any changes were made to the chunk, return True as completed value
         return CompletableFuture.allOf(futures).thenApply((o) -> {
+            isApplied = true;
+
             try {
                 for (CompletableFuture<Boolean> future : futures) {
                     if (future.get().booleanValue()) {
