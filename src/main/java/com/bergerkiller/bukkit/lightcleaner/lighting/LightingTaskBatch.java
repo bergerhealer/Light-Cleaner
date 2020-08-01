@@ -1,6 +1,7 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
-import com.bergerkiller.bukkit.common.AsyncTask;
+import com.bergerkiller.bukkit.common.utils.CommonUtil;
+import com.bergerkiller.bukkit.common.utils.LogicUtil;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
@@ -11,7 +12,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Consumer;
 import java.util.logging.Level;
 
 import org.bukkit.Chunk;
@@ -31,6 +31,7 @@ public class LightingTaskBatch implements LightingTask {
     private boolean done = false;
     private boolean aborted = false;
     private volatile long timeStarted = 0;
+    private int numBeingLoaded = 0;
     private volatile Stage stage = Stage.LOADING;
     private LightingService.ScheduleArguments options = new LightingService.ScheduleArguments();
 
@@ -139,7 +140,7 @@ public class LightingTaskBatch implements LightingTask {
                     if (this.chunks != null) {
                         int num_loaded = 0;
                         for (LightingChunk lc : this.chunks) {
-                            if (lc.isFilled) {
+                            if (!lc.forcedChunk.isNone() && lc.forcedChunk.getChunkAsync().isDone()) {
                                 num_loaded++;
                             }
                         }
@@ -175,6 +176,72 @@ public class LightingTaskBatch implements LightingTask {
         }
     }
 
+    private boolean waitForCheckAborted(CompletableFuture<?> future) {
+        while (!aborted) {
+            try {
+                future.get(200, TimeUnit.MILLISECONDS);
+                return true;
+            } catch (InterruptedException | ExecutionException | TimeoutException e1) {}
+        }
+        return false;
+    }
+
+    private void tryLoadMoreChunks(final CompletableFuture<Void>[] chunkFutures) {
+        if (this.aborted) {
+            return;
+        }
+
+        synchronized (chunks_lock) {
+            for (int i = 0; i < chunks.length && numBeingLoaded < LightCleaner.asyncLoadConcurrency; i++) {
+                LightingChunk lc = chunks[i];
+                if (!lc.forcedChunk.isNone()) {
+                    continue; // already being loaded
+                }
+
+                final CompletableFuture<Void> chunkFuture = chunkFutures[i];
+                if (chunkFuture.isDone()) {
+                    continue; // already completed? Weird.
+                }
+
+                lc.forcedChunk.move(LightingForcedChunkCache.get(world, lc.chunkX, lc.chunkZ));
+                CompletableFuture<Chunk> asyncLoad = lc.forcedChunk.getChunkAsync();
+                if (asyncLoad.isDone()) {
+                    chunkFuture.complete(null);
+                } else {
+                    numBeingLoaded++;
+                }
+
+                // Once done loading, load more chunks
+                asyncLoad.whenComplete((chunk, t) -> {
+                    synchronized (chunks_lock) {
+                        numBeingLoaded--;
+                    }
+
+                    chunkFuture.complete(null);
+                    tryLoadMoreChunks(chunkFutures);
+                });
+            }
+        }
+    }
+
+    private CompletableFuture<Void> loadChunks() {
+        // For every LightingChunk, make a completable future
+        // Once all these futures are resolved the returned completable future resolves
+        CompletableFuture<Void>[] chunkFutures;
+        synchronized (this.chunks_lock) {
+            chunkFutures = new CompletableFuture[this.chunks.length];
+        }
+        for (int i = 0; i < chunkFutures.length; i++) {
+            chunkFutures[i] = new CompletableFuture<Void>();
+        }
+
+        // Start loading up to [asyncLoadConcurrency] number of chunks right now
+        // When a callback for a chunk load completes, we start loading additional chunks
+        tryLoadMoreChunks(chunkFutures);
+
+        return CompletableFuture.allOf(chunkFutures);
+    }
+
     @Override
     public void process() {
         // Begin
@@ -200,89 +267,72 @@ public class LightingTaskBatch implements LightingTask {
             this.chunks_coords = null;
         }
 
-        // Accessibility
-        // Load the chunk with data
-        for (LightingChunk lc : this.chunks) {
-            for (LightingChunk neigh : this.chunks) {
-                lc.notifyAccessible(neigh);
-            }
-        }
-
         // Check aborted
         if (aborted) {
             return;
         }
 
-        // Asynchronously load all the chunks
-        boolean isFullyLoaded;
-        do {
-            // Get number of chunks currently being loaded
-            int numBeingLoaded = 0;
-            for (LightingChunk lc : LightingTaskBatch.this.chunks) {
-                if (lc.isChunkLoading) {
-                    numBeingLoaded++;
-                }
-            }
-
-            // Load chunks
-            isFullyLoaded = true;
-            for (final LightingChunk lc : LightingTaskBatch.this.chunks) {
-                if (lc.isFilled) {
-                    continue;
-                }
-
-                isFullyLoaded = false;
-
-                if (lc.isChunkLoading) {
-                    continue;
-                }
-
-                if (numBeingLoaded >= LightCleaner.asyncLoadConcurrency) {
-                    break;
-                }
-
-                // Load the chunk sync or async
-                lc.isChunkLoading = true;
-                lc.forcedChunk.move(LightingForcedChunkCache.get(world, lc.chunkX, lc.chunkZ));
-                CompletableFuture<Chunk> asyncLoad = lc.forcedChunk.getChunkAsync();
-                if (!asyncLoad.isDone()) {
-                    numBeingLoaded++;
-                }
-
-                // Once loaded, fill with the data from the chunk
-                asyncLoad.thenAccept(new Consumer<Chunk>() {
-                    @Override
-                    public void accept(Chunk chunk) {
-                        try {
-                            if (!LightingTaskBatch.this.aborted) {
-                                lc.fill(chunk);
-                            }
-                        } catch (Throwable t) {
-                            LightCleaner.plugin.getLogger().log(Level.SEVERE, "Failed to fill chunk [" + chunk.getX() + "/" + chunk.getZ() + "]", t);
-                            abort();
-                        }
-                        lc.isChunkLoading = false;
-                    }
-                });
-            }
-
-            // Wait a short while.
-            // TODO: Perhaps would be better to use a Lock object for this
-            if (!isFullyLoaded) {
-                AsyncTask.sleep(25);
-            }
-
-            // If aborted, stop entirely
-            if (this.aborted) {
-                return;
-            }
-        } while (!isFullyLoaded);
+        // Load all the chunks. Wait for loading to finish.
+        // Regularly check that this task is not aborted
+        CompletableFuture<Void> loadChunksFuture = this.loadChunks();
+        if (!waitForCheckAborted(loadChunksFuture)) {
+            return;
+        }
 
         // Causes all chunks in cache not used for this task to unload
         // All chunks of this task are put into the cache, instead
         LightingForcedChunkCache.reset();
         for (LightingChunk lc : LightingTaskBatch.this.chunks) {
             LightingForcedChunkCache.store(lc.forcedChunk);
+        }
+
+        // All chunks that can be loaded, are now loaded.
+        // Some chunks may have failed to be loaded, get rid of those now!
+        // To avoid massive spam, only show the average x/z coordinates of the chunk affected
+        synchronized (this.chunks_lock) {
+            long failed_chunk_avg_x = 0;
+            long failed_chunk_avg_z = 0;
+            int failed_chunk_count = 0;
+
+            LightingChunk[] new_chunks = this.chunks;
+            for (int i = new_chunks.length-1; i >= 0; i--) {
+                LightingChunk lc = new_chunks[i];
+                if (lc.forcedChunk.getChunkAsync().isCompletedExceptionally()) {
+                    failed_chunk_avg_x += lc.chunkX;
+                    failed_chunk_avg_z += lc.chunkZ;
+                    failed_chunk_count++;
+                    new_chunks = LogicUtil.removeArrayElement(new_chunks, i);
+                }
+            }
+            this.chunks = new_chunks;
+
+            // Tell all the (remaining) chunks about other neighbouring chunks before initialization
+            for (LightingChunk lc : new_chunks) {
+                for (LightingChunk neigh : new_chunks) {
+                    lc.notifyAccessible(neigh);
+                }
+            }
+
+            // Log when chunks fail to be loaded
+            if (failed_chunk_count > 0) {
+                failed_chunk_avg_x = ((failed_chunk_avg_x / failed_chunk_count) << 4);
+                failed_chunk_avg_z = ((failed_chunk_avg_z / failed_chunk_count) << 4);
+                LightCleaner.plugin.getLogger().severe("Failed to load " + failed_chunk_count + " chunks near " +
+                        "world=" + world.getName() + " x=" + failed_chunk_avg_x + " z=" + failed_chunk_avg_z);
+            }
+        }
+
+        // Schedule, on the main thread, to fill all the loaded chunks with data
+        CompletableFuture<Void> chunkFillFuture = CompletableFuture.runAsync(() -> {
+            synchronized (this.chunks_lock) {
+                for (LightingChunk lc : chunks) {
+                    lc.fill(lc.forcedChunk.getChunk());
+                }
+            }
+        }, CommonUtil.getPluginExecutor(LightCleaner.plugin));
+
+        if (!waitForCheckAborted(chunkFillFuture)) {
+            return;
         }
 
         // Fix

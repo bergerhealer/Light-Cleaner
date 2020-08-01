@@ -2,7 +2,6 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import java.util.concurrent.CompletableFuture;
 
-import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
