@@ -2,13 +2,13 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.chunk.ForcedChunk;
+import com.bergerkiller.bukkit.common.collections.BlockFaceSet;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.common.wrappers.HeightMap;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
-import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;
@@ -43,7 +43,9 @@ public class LightingChunk {
     public boolean isApplied = false;
     public IntVector2 start = new IntVector2(1, 1);
     public IntVector2 end = new IntVector2(14, 14);
+    public int maxY = 0;
     public final ForcedChunk forcedChunk = ForcedChunk.none();
+    public volatile boolean loadingStarted = false;
 
     public LightingChunk(World world, int x, int z) {
         this.world = world;
@@ -88,6 +90,15 @@ public class LightingChunk {
             }
         }
 
+        // Compute max y using sections that are available
+        this.maxY = 0;
+        for (int section = SECTION_COUNT; section > 0; section--) {
+            if (sections[section - 1] != null) {
+                this.maxY = (section << 4) - 1;
+                break;
+            }
+        }
+
         // Initialize and then load sky light heightmap information
         if (this.hasSkyLight) {
             HeightMap heightmap = ChunkUtil.getLightHeightMap(chunk, true);
@@ -101,15 +112,6 @@ public class LightingChunk {
         }
 
         this.isFilled = true;
-    }
-
-    private int getTopY() {
-        for (int section = SECTION_COUNT; section > 0; section--) {
-            if (sections[section - 1] != null) {
-                return (section << 4) - 1;
-            }
-        }
-        return 0;
     }
 
     private int getHeightKey(int x, int z) {
@@ -136,88 +138,147 @@ public class LightingChunk {
         }
 
         // Find out the highest possible Y-position
-        int topY = getTopY();
         int x, y, z, light, height, opacity;
+        BlockFaceSet opaqueFaces;
         LightingChunkSection section;
         // Apply initial sky lighting from top to bottom
-        for (x = start.x; x <= end.x; x++) {
-            for (z = start.z; z <= end.z; z++) {
+        for (z = start.z; z <= end.z; z++) {
+            for (x = start.x; x <= end.x; x++) {
                 light = 15;
                 height = getHeight(x, z);
-                for (y = topY; y >= 0; y--) {
+                for (y = maxY; y >= 0; y--) {
                     if ((section = sections[y >> 4]) == null) {
                         // Skip the remaining 15: they are all inaccessible as well
                         y -= 15;
+
+                        // If not full skylight, reset light level, assuming it dimmed out
+                        if (light != 15) {
+                            light = 0;
+                        }
                         continue;
                     }
 
-                    // Only process these once below the height at this x/z
-                    if (y <= height) {
+                    // Set quickly when light level is at 0, or we are above height level
+                    if (y > height || light <= 0) {
+                        section.skyLight.set(x, y & 0xf, z, light);
+                        continue;
+                    }
+
+                    // If opaque at the top, set light to 0 instantly
+                    opaqueFaces = section.opaqueFaces.get(x, y & 0xf, z);
+                    if (opaqueFaces.up()) {
+                        light = 0;
+                    } else {
                         // Apply the opacity to the light level
                         opacity = section.opacity.get(x, y & 0xf, z);
-                        if (light <= 0 || (light -= opacity) <= 0) {
+                        if ((light -= opacity) <= 0) {
                             light = 0;
                         }
                     }
 
                     // Apply sky light to block
                     section.skyLight.set(x, y & 0xf, z, light);
+
+                    // If opaque at the bottom, reset light to 0 for next block
+                    // The block itself is lit
+                    if (opaqueFaces.down()) {
+                        light = 0;
+                    }
                 }
             }
         }
     }
 
+    // Checks for a higher light level, potentially outside of the current chunk section, on the same x/z
+    // Selects the appropriate chunk slice of this chunk
+    private int getLightIfHigherVertical(LightingCategory category, int old_light, int faceMask, int x, int y, int z) {
+        final LightingChunkSection section = this.sections[y >> 4];
+        return (section == null) ? old_light : getLightIfHigher(category, section, old_light, faceMask, x, y & 0xf, z);
+    }
 
-    private final int getMaxLightLevel(LightingChunkSection section, boolean skyLight, int lightLevel, int x, int y, int z) {
+    // Checks for a higher light level, potentially outside of this chunk, on the same y level
+    // Selects the appropriate neighbouring chunk
+    private int getLightIfHigherNeighbour(LightingCategory category, int old_light, int faceMask, int x, int y, int z) {
+        final LightingChunk chunk = (x & OB | z & OB) == 0 ? this : neighbors.get(x >> 4, z >> 4);
+        final LightingChunkSection section = chunk.sections[y >> 4];
+        return (section == null) ? old_light : getLightIfHigher(category, section, old_light, faceMask, x & 0xf, y & 0xf, z & 0xf);
+    }
+
+    // Read light level. If possibly more, also check opaque faces, and then return the higher light value if passed
+    private static int getLightIfHigher(LightingCategory category, LightingChunkSection section, int old_light, int faceMask, int x, int y, int z) {
+        int new_light_level = category.get(section, x, y, z);
+        return (new_light_level > old_light && !section.getOpaqueFaces(x, y, z).get(faceMask))
+                ? new_light_level : old_light;
+    }
+
+    private final int getMaxLightLevel(LightingChunkSection section, LightingCategory category, int lightLevel, int x, int y, int z) {
+        BlockFaceSet selfOpaqueFaces = section.getOpaqueFaces(x, y & 0xf, z);
         if (x >= 1 && z >= 1 && x <= 14 && z <= 14) {
             // All within this chunk - simplified calculation
             final int dy = y & 0xf;
-            final NibbleArrayHandle light = skyLight ? section.skyLight : section.blockLight;
-            lightLevel = Math.max(lightLevel, light.get(x - 1, dy, z));
-            lightLevel = Math.max(lightLevel, light.get(x + 1, dy, z));
-            lightLevel = Math.max(lightLevel, light.get(x, dy, z - 1));
-            lightLevel = Math.max(lightLevel, light.get(x, dy, z + 1));
+            if (!selfOpaqueFaces.west()) {
+                lightLevel = getLightIfHigher(category, section, lightLevel,
+                        BlockFaceSet.MASK_EAST, x - 1, dy, z);
+            }
+            if (!selfOpaqueFaces.east()) {
+                lightLevel = getLightIfHigher(category, section, lightLevel,
+                        BlockFaceSet.MASK_WEST, x + 1, dy, z);
+            }
+            if (!selfOpaqueFaces.north()) {
+                lightLevel = getLightIfHigher(category, section, lightLevel,
+                        BlockFaceSet.MASK_SOUTH, x, dy, z - 1);
+            }
+            if (!selfOpaqueFaces.south()) {
+                lightLevel = getLightIfHigher(category, section, lightLevel,
+                        BlockFaceSet.MASK_NORTH, x, dy, z + 1);
+            }
 
             // If dy is also within this section, we can simplify it
             if (dy >= 1 && dy <= 14) {
-                lightLevel = Math.max(lightLevel, light.get(x, dy - 1, z));
-                lightLevel = Math.max(lightLevel, light.get(x, dy + 1, z));
+                if (!selfOpaqueFaces.down()) {
+                    lightLevel = getLightIfHigher(category, section, lightLevel,
+                            BlockFaceSet.MASK_UP, x, dy - 1, z);
+                }
+                if (!selfOpaqueFaces.up()) {
+                    lightLevel = getLightIfHigher(category, section, lightLevel,
+                            BlockFaceSet.MASK_DOWN, x, dy + 1, z);
+                }
                 return lightLevel;
             }
         } else {
             // Crossing chunk boundaries - requires neighbor checks
-            lightLevel = Math.max(lightLevel, getLightLevel(skyLight, x - 1, y, z));
-            lightLevel = Math.max(lightLevel, getLightLevel(skyLight, x + 1, y, z));
-            lightLevel = Math.max(lightLevel, getLightLevel(skyLight, x, y, z - 1));
-            lightLevel = Math.max(lightLevel, getLightLevel(skyLight, x, y, z + 1));
+            if (!selfOpaqueFaces.west()) {
+                lightLevel = getLightIfHigherNeighbour(category, lightLevel,
+                        BlockFaceSet.MASK_EAST, x - 1, y, z);
+            }
+            if (!selfOpaqueFaces.east()) {
+                lightLevel = getLightIfHigherNeighbour(category, lightLevel,
+                        BlockFaceSet.MASK_WEST, x + 1, y, z);
+            }
+            if (!selfOpaqueFaces.north()) {
+                lightLevel = getLightIfHigherNeighbour(category, lightLevel,
+                        BlockFaceSet.MASK_SOUTH, x, y, z - 1);
+            }
+            if (!selfOpaqueFaces.south()) {
+                lightLevel = getLightIfHigherNeighbour(category, lightLevel,
+                        BlockFaceSet.MASK_NORTH, x, y, z + 1);
+            }
         }
 
         // Slice below
-        if (y >= 1) {
-            final LightingChunkSection sectionBelow = this.sections[(y - 1) >> 4];
-            if (sectionBelow != null) {
-                lightLevel = Math.max(lightLevel, sectionBelow.getLight(skyLight, x, (y - 1) & 0xf, z));
-            }
+        if (y >= 1 && !selfOpaqueFaces.down()) {
+            lightLevel = getLightIfHigherVertical(category, lightLevel,
+                    BlockFaceSet.MASK_UP, x, (y - 1), z);
         }
 
         // Slice above
-        if (y <= 254) {
-            final LightingChunkSection sectionAbove = this.sections[(y + 1) >> 4];
-            if (sectionAbove != null) {
-                lightLevel = Math.max(lightLevel, sectionAbove.getLight(skyLight, x, (y + 1) & 0xf, z));
-            }
+        if (y <= 254 && !selfOpaqueFaces.up()) {
+            lightLevel = getLightIfHigherVertical(category, lightLevel,
+                    BlockFaceSet.MASK_DOWN, x, (y + 1), z);
         }
 
         return lightLevel;
     }
-
-    private final int getLightLevel(boolean skyLight, int x, int y, int z) {
-        // Outside the blocks space of this chunk?
-        final LightingChunk chunk = (x & OB | z & OB) == 0 ? this : neighbors.get(x >> 4, z >> 4);
-        final LightingChunkSection section = chunk.sections[y >> 4];
-        return section == null ? 0 : section.getLight(skyLight, x & 0xf, y & 0xf, z & 0xf);
-    }
-
 
     /**
      * Gets whether this lighting chunk has faults that need to be fixed
@@ -237,10 +298,10 @@ public class LightingChunk {
         if (hasFaults()) {
             int count = 0;
             if (isSkyLightDirty) {
-                count += spread(true);
+                count += spread(LightingCategory.SKY);
             }
             if (isBlockLightDirty) {
-                count += spread(false);
+                count += spread(LightingCategory.BLOCK);
             }
             return count;
         } else {
@@ -248,15 +309,15 @@ public class LightingChunk {
         }
     }
 
-    private int spread(boolean skyLight) {
-        if (skyLight && !hasSkyLight) {
+    private int spread(LightingCategory category) {
+        if ((category == LightingCategory.SKY) && !hasSkyLight) {
             this.isSkyLightDirty = false;
             return 0;
         }
+
         int x, y, z, light, factor, startY, newlight;
         int loops = 0;
         int lasterrx = 0, lasterry = 0, lasterrz = 0;
-        final int maxY = getTopY();
         boolean haserror;
 
         boolean err_neigh_nx = false;
@@ -288,7 +349,7 @@ public class LightingChunk {
             // Go through all blocks, using the heightmap for sky light to skip a few
             for (x = loop_start.x; x != loop_end.x; x += loop_increment) {
                 for (z = loop_start.z; z != loop_end.z; z += loop_increment) {
-                    startY = skyLight ? getHeight(x, z) : maxY;
+                    startY = category.getStartY(this, x, z);
                     for (y = startY; y > 0; y--) {
                         if ((chunksection = this.sections[y >> 4]) == null) {
                             // Skip this section entirely by setting y to the bottom of the section
@@ -301,16 +362,16 @@ public class LightingChunk {
                         }
 
                         // Read the old light level and try to find a light level around it that exceeds
-                        light = chunksection.getLight(skyLight, x, y & 0xf, z);
+                        light = category.get(chunksection, x, y & 0xf, z);
                         newlight = light + factor;
                         if (newlight < 15) {
-                            newlight = getMaxLightLevel(chunksection, skyLight, newlight, x, y, z);
+                            newlight = getMaxLightLevel(chunksection, category, newlight, x, y, z);
                         }
                         newlight -= factor;
 
                         // pick the highest value
                         if (newlight > light) {
-                            chunksection.setLight(skyLight, x, y & 0xf, z, newlight);
+                            category.set(chunksection, x, y & 0xf, z, newlight);
                             lasterrx = x;
                             lasterry = y;
                             lasterrz = z;
@@ -330,7 +391,7 @@ public class LightingChunk {
                 lasterrx += this.chunkX << 4;
                 lasterrz += this.chunkZ << 4;
                 StringBuilder msg = new StringBuilder();
-                msg.append("Failed to fix all " + (skyLight ? "Sky" : "Block") + " lighting at [");
+                msg.append("Failed to fix all " + category.getName() + " lighting at [");
                 msg.append(lasterrx).append('/').append(lasterry);
                 msg.append('/').append(lasterrz).append(']');
                 LightCleaner.plugin.log(Level.WARNING, msg.toString());
@@ -338,29 +399,22 @@ public class LightingChunk {
             }
         }
 
-        if (skyLight) {
-            this.isSkyLightDirty = false;
-        } else {
-            this.isBlockLightDirty = false;
-        }
+        // Set self as no longer dirty, all light is good
+        category.setDirty(this, false);
 
         // When we change blocks at our chunk borders, neighbours have to do another spread cycle
-        if (err_neigh_nx) markNeighbor(-1, 0, skyLight);
-        if (err_neigh_px) markNeighbor(1, 0, skyLight);
-        if (err_neigh_nz) markNeighbor(0, -1, skyLight);
-        if (err_neigh_pz) markNeighbor(0, 1, skyLight);
+        if (err_neigh_nx) setNeighbourDirty(-1, 0, category);
+        if (err_neigh_px) setNeighbourDirty(1, 0, category);
+        if (err_neigh_nz) setNeighbourDirty(0, -1, category);
+        if (err_neigh_pz) setNeighbourDirty(0, 1, category);
 
         return loops;
     }
 
-    private void markNeighbor(int dx, int dz, boolean skyLight) {
+    private void setNeighbourDirty(int dx, int dz, LightingCategory category) {
         LightingChunk n = neighbors.get(dx, dz);
         if (n != null) {
-            if (skyLight) {
-                n.isSkyLightDirty = true;
-            } else {
-                n.isBlockLightDirty = true;
-            }
+            category.setDirty(n, true);
         }
     }
 
@@ -404,5 +458,4 @@ public class LightingChunk {
             return Boolean.FALSE;
         });
     }
-
 }

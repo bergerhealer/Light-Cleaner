@@ -15,8 +15,11 @@ import com.bergerkiller.bukkit.common.utils.WorldUtil;
 public class LightingForcedChunkCache {
     private static final Map<Key, ForcedChunk> _cache = new HashMap<Key, ForcedChunk>();
 
-    public static synchronized ForcedChunk get(World world, int x, int z) {
-        ForcedChunk cached = _cache.get(new Key(world, x, z));
+    public static ForcedChunk get(World world, int x, int z) {
+        ForcedChunk cached;
+        synchronized (_cache) {
+            cached = _cache.get(new Key(world, x, z));
+        }
         if (cached != null) {
             return cached.clone();
         } else {
@@ -24,18 +27,23 @@ public class LightingForcedChunkCache {
         }
     }
 
-    public static synchronized void store(ForcedChunk chunk) {
-        ForcedChunk prev = _cache.put(new Key(chunk.getWorld(), chunk.getX(), chunk.getZ()), chunk.clone());
+    public static void store(ForcedChunk chunk) {
+        ForcedChunk prev;
+        synchronized (_cache) {
+            prev = _cache.put(new Key(chunk.getWorld(), chunk.getX(), chunk.getZ()), chunk.clone());
+        }
         if (prev != null) {
             prev.close();
         }
     }
 
-    public static synchronized void reset() {
-        for (ForcedChunk chunk : _cache.values()) {
-            chunk.close();
+    public static void reset() {
+        synchronized (_cache) {
+            for (ForcedChunk chunk : _cache.values()) {
+                chunk.close();
+            }
+            _cache.clear();
         }
-        _cache.clear();
     }
 
     private static final class Key {

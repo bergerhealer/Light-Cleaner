@@ -191,39 +191,52 @@ public class LightingTaskBatch implements LightingTask {
             return;
         }
 
-        synchronized (chunks_lock) {
-            for (int i = 0; i < chunks.length && numBeingLoaded < LightCleaner.asyncLoadConcurrency; i++) {
-                LightingChunk lc = chunks[i];
-                if (!lc.forcedChunk.isNone()) {
-                    continue; // already being loaded
-                }
-
-                final CompletableFuture<Void> chunkFuture = chunkFutures[i];
-                if (chunkFuture.isDone()) {
-                    continue; // already completed? Weird.
-                }
-
-                lc.forcedChunk.move(LightingForcedChunkCache.get(world, lc.chunkX, lc.chunkZ));
-                CompletableFuture<Chunk> asyncLoad = lc.forcedChunk.getChunkAsync();
-                if (asyncLoad.isDone()) {
-                    chunkFuture.complete(null);
-                } else {
-                    numBeingLoaded++;
-                }
-
-                // Once done loading, load more chunks
-                asyncLoad.whenComplete((chunk, t) -> {
-                    synchronized (chunks_lock) {
-                        numBeingLoaded--;
+        int i = 0;
+        while (true) {
+            // While synchronized, pick the next chunk to load
+            LightingChunk nextChunk = null;
+            CompletableFuture<Void> nextChunkFuture = null;
+            synchronized (chunks_lock) {
+                for (;i < chunks.length && numBeingLoaded < LightCleaner.asyncLoadConcurrency; i++) {
+                    LightingChunk lc = chunks[i];
+                    if (lc.loadingStarted) {
+                        continue; // Already (being) loaded
                     }
 
-                    chunkFuture.complete(null);
-                    tryLoadMoreChunks(chunkFutures);
-                });
+                    // Pick it
+                    numBeingLoaded++;
+                    lc.loadingStarted = true;
+                    nextChunk = lc;
+                    nextChunkFuture = chunkFutures[i];
+                    break;
+                }
             }
+
+            // No more chunks to load / capacity reached
+            if (nextChunk == null) {
+                break;
+            }
+
+            // This shouldn't happen, but just in case, a check
+            if (nextChunkFuture.isDone()) {
+                continue;
+            }
+
+            // Outside of the lock, start loading the next chunk
+            final CompletableFuture<Void> f_nextChunkFuture = nextChunkFuture;
+            nextChunk.forcedChunk.move(LightingForcedChunkCache.get(world, nextChunk.chunkX, nextChunk.chunkZ));
+            nextChunk.forcedChunk.getChunkAsync().whenComplete((chunk, t) -> {
+                synchronized (chunks_lock) {
+                    numBeingLoaded--;
+                }
+
+                f_nextChunkFuture.complete(null);
+                tryLoadMoreChunks(chunkFutures);
+            });
         }
     }
 
+    @SuppressWarnings("unchecked")
     private CompletableFuture<Void> loadChunks() {
         // For every LightingChunk, make a completable future
         // Once all these futures are resolved the returned completable future resolves
