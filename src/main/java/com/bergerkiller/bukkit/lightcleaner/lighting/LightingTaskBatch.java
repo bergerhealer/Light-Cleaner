@@ -437,10 +437,12 @@ public class LightingTaskBatch implements LightingTask {
      */
     public void fix() {
         // Initialize light
-        for (LightingChunk chunk : chunks) {
-            chunk.initLight();
-            if (this.aborted) {
-                return;
+        for (LightingCategory category : LightingCategory.values()) {
+            for (LightingChunk chunk : chunks) {
+                category.initialize(chunk);
+                if (this.aborted) {
+                    return;
+                }
             }
         }
 

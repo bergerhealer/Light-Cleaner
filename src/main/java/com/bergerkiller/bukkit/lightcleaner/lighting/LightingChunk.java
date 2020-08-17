@@ -129,66 +129,6 @@ public class LightingChunk {
         return this.heightmap[getHeightKey(x, z)];
     }
 
-    /**
-     * Initializes the sky lighting and generates the heightmap
-     */
-    public void initLight() {
-        if (!hasSkyLight) {
-            return;
-        }
-
-        // Find out the highest possible Y-position
-        int x, y, z, light, height, opacity;
-        BlockFaceSet opaqueFaces;
-        LightingChunkSection section;
-        // Apply initial sky lighting from top to bottom
-        for (z = start.z; z <= end.z; z++) {
-            for (x = start.x; x <= end.x; x++) {
-                light = 15;
-                height = getHeight(x, z);
-                for (y = maxY; y >= 0; y--) {
-                    if ((section = sections[y >> 4]) == null) {
-                        // Skip the remaining 15: they are all inaccessible as well
-                        y -= 15;
-
-                        // If not full skylight, reset light level, assuming it dimmed out
-                        if (light != 15) {
-                            light = 0;
-                        }
-                        continue;
-                    }
-
-                    // Set quickly when light level is at 0, or we are above height level
-                    if (y > height || light <= 0) {
-                        section.skyLight.set(x, y & 0xf, z, light);
-                        continue;
-                    }
-
-                    // If opaque at the top, set light to 0 instantly
-                    opaqueFaces = section.opaqueFaces.get(x, y & 0xf, z);
-                    if (opaqueFaces.up()) {
-                        light = 0;
-                    } else {
-                        // Apply the opacity to the light level
-                        opacity = section.opacity.get(x, y & 0xf, z);
-                        if ((light -= opacity) <= 0) {
-                            light = 0;
-                        }
-                    }
-
-                    // Apply sky light to block
-                    section.skyLight.set(x, y & 0xf, z, light);
-
-                    // If opaque at the bottom, reset light to 0 for next block
-                    // The block itself is lit
-                    if (opaqueFaces.down()) {
-                        light = 0;
-                    }
-                }
-            }
-        }
-    }
-
     // Checks for a higher light level, potentially outside of the current chunk section, on the same x/z
     // Selects the appropriate chunk slice of this chunk
     private int getLightIfHigherVertical(LightingCategory category, int old_light, int faceMask, int x, int y, int z) {
@@ -212,10 +152,10 @@ public class LightingChunk {
     }
 
     private final int getMaxLightLevel(LightingChunkSection section, LightingCategory category, int lightLevel, int x, int y, int z) {
-        BlockFaceSet selfOpaqueFaces = section.getOpaqueFaces(x, y & 0xf, z);
+        final int dy = y & 0xf;
+        BlockFaceSet selfOpaqueFaces = section.getOpaqueFaces(x, dy, z);
         if (x >= 1 && z >= 1 && x <= 14 && z <= 14) {
             // All within this chunk - simplified calculation
-            final int dy = y & 0xf;
             if (!selfOpaqueFaces.west()) {
                 lightLevel = getLightIfHigher(category, section, lightLevel,
                         BlockFaceSet.MASK_EAST, x - 1, dy, z);
@@ -278,6 +218,54 @@ public class LightingChunk {
         }
 
         return lightLevel;
+    }
+
+    // Used during block light initialization, to spread emitted light to neighbouring blocks
+    public void spreadBlockLight(LightingChunkSection section, int x, int y, int z) {
+        final int dy = y & 0xf;
+        int emitted = section.emittedLight.get(x, dy, z);
+        if (emitted <= 1) {
+            return; // Skip if neighbouring blocks won't receive light from it
+        }
+        if (x >= 1 && z >= 1 && x <= 14 && z <= 14) {
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_EAST,  x-1, y, z);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_WEST,  x+1, y, z);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_SOUTH, x, y, z-1);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_NORTH, x, y, z+1);
+        } else {
+            trySpreadBlockLight(emitted, BlockFaceSet.MASK_EAST,  x-1, y, z);
+            trySpreadBlockLight(emitted, BlockFaceSet.MASK_WEST,  x+1, y, z);
+            trySpreadBlockLight(emitted, BlockFaceSet.MASK_SOUTH, x, y, z-1);
+            trySpreadBlockLight(emitted, BlockFaceSet.MASK_NORTH, x, y, z+1);
+        }
+        if (dy >= 1 && dy <= 14) {
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_UP,    x, y-1, z);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_DOWN,  x, y+1, z);
+        } else {
+            trySpreadBlockLight(emitted, BlockFaceSet.MASK_UP,   x, y-1, z);
+            trySpreadBlockLight(emitted, BlockFaceSet.MASK_DOWN, x, y+1, z);
+        }
+    }
+
+    // This is used when chunk section must be selected first
+    private void trySpreadBlockLight(int emitted, int faceMask, int x, int y, int z) {
+        if (y >= 1 && y <= 254) {
+            final LightingChunk chunk = (x & OB | z & OB) == 0 ? this : neighbors.get(x >> 4, z >> 4);
+            final LightingChunkSection section = chunk.sections[y >> 4];
+            if (section != null) {
+                trySpreadBlockLightWithin(section, emitted, faceMask, x & 0xf, y & 0xf, z & 0xf);
+            }
+        }
+    }
+
+    // This is used for blocks within the same chunk section
+    private static void trySpreadBlockLightWithin(LightingChunkSection section, int emitted, int faceMask, int x, int y, int z) {
+        if (!section.getOpaqueFaces(x, y, z).get(faceMask)) {
+            int new_level = emitted - section.opacity.get(x, y, z);
+            if (new_level > section.blockLight.get(x, y, z)) {
+                section.blockLight.set(x, y, z, new_level);
+            }
+        }
     }
 
     /**

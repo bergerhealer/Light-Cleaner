@@ -13,8 +13,9 @@ public class LightingChunkSection {
     public final LightingChunk owner;
     public final NibbleArrayHandle skyLight;
     public final NibbleArrayHandle blockLight;
+    public final NibbleArrayHandle emittedLight;
     public final NibbleArrayHandle opacity;
-    public final BlockFaceSetSection opaqueFaces;
+    private final BlockFaceSetSection opaqueFaces;
 
     public LightingChunkSection(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
         this.owner = owner;
@@ -62,6 +63,7 @@ public class LightingChunkSection {
 
         // Fill opacity and initial block lighting values
         this.opacity = NibbleArrayHandle.createNew();
+        this.emittedLight = NibbleArrayHandle.createNew();
         this.opaqueFaces = new BlockFaceSetSection();
         int x, y, z, opacity, blockEmission;
         BlockFaceSet opaqueFaces;
@@ -83,37 +85,12 @@ public class LightingChunkSection {
                     }
 
                     this.opacity.set(x, y, z, opacity);
+                    this.emittedLight.set(x, y, z, blockEmission);
                     this.blockLight.set(x, y, z, blockEmission);
                     this.opaqueFaces.set(x, y, z, opaqueFaces);
                 }
             }
         }
-    }
-
-    /**
-     * Sets a light level
-     *
-     * @param x        - coordinate
-     * @param y        - coordinate
-     * @param z        - coordinate
-     * @param skyLight state: True for skyLight, False for blockLight
-     * @param value    of light to set to
-     */
-    public void setLight(boolean skyLight, int x, int y, int z, int value) {
-        (skyLight ? this.skyLight : this.blockLight).set(x, y, z, value);
-    }
-
-    /**
-     * Gets a light level
-     *
-     * @param x        - coordinate
-     * @param y        - coordinate
-     * @param z        - coordinate
-     * @param skyLight state: True for skyLight, False for blockLight
-     * @return the light level
-     */
-    public int getLight(boolean skyLight, int x, int y, int z) {
-        return (skyLight ? this.skyLight : this.blockLight).get(x, y, z);
     }
 
     /**
