@@ -228,10 +228,10 @@ public class LightingChunk {
             return; // Skip if neighbouring blocks won't receive light from it
         }
         if (x >= 1 && z >= 1 && x <= 14 && z <= 14) {
-            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_EAST,  x-1, y, z);
-            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_WEST,  x+1, y, z);
-            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_SOUTH, x, y, z-1);
-            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_NORTH, x, y, z+1);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_EAST,  x-1, dy, z);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_WEST,  x+1, dy, z);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_SOUTH, x, dy, z-1);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_NORTH, x, dy, z+1);
         } else {
             trySpreadBlockLight(emitted, BlockFaceSet.MASK_EAST,  x-1, y, z);
             trySpreadBlockLight(emitted, BlockFaceSet.MASK_WEST,  x+1, y, z);
@@ -239,8 +239,8 @@ public class LightingChunk {
             trySpreadBlockLight(emitted, BlockFaceSet.MASK_NORTH, x, y, z+1);
         }
         if (dy >= 1 && dy <= 14) {
-            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_UP,    x, y-1, z);
-            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_DOWN,  x, y+1, z);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_UP,    x, dy-1, z);
+            trySpreadBlockLightWithin(section, emitted, BlockFaceSet.MASK_DOWN,  x, dy+1, z);
         } else {
             trySpreadBlockLight(emitted, BlockFaceSet.MASK_UP,   x, y-1, z);
             trySpreadBlockLight(emitted, BlockFaceSet.MASK_DOWN, x, y+1, z);
