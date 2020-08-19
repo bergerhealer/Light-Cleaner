@@ -53,6 +53,9 @@ public enum LightingCategory {
                         } else {
                             // Apply the opacity to the light level
                             opacity = section.opacity.get(x, y & 0xf, z);
+                            if (light < 15 && opacity == 0) {
+                                opacity = 1;
+                            }
                             if ((light -= opacity) <= 0) {
                                 light = 0;
                             }

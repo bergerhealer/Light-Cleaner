@@ -261,7 +261,7 @@ public class LightingChunk {
     // This is used for blocks within the same chunk section
     private static void trySpreadBlockLightWithin(LightingChunkSection section, int emitted, int faceMask, int x, int y, int z) {
         if (!section.getOpaqueFaces(x, y, z).get(faceMask)) {
-            int new_level = emitted - section.opacity.get(x, y, z);
+            int new_level = emitted - Math.max(1,  section.opacity.get(x, y, z));
             if (new_level > section.blockLight.get(x, y, z)) {
                 section.blockLight.set(x, y, z, new_level);
             }
