@@ -451,6 +451,28 @@ public class LightingTaskBatch implements LightingTask {
             return;
         }
 
+        // Before spreading, change the opacity values to have a minimum of 1
+        // Spreading can never be done without losing light
+        // This isn't done during initialization because it is important
+        // for calculating the first opacity>0 block for sky light.
+        for (LightingChunk chunk : chunks) {
+            for (LightingChunkSection section : chunk.sections) {
+                if (section != null) {
+                    //TODO: Maybe build something into BKCommonLib for this
+                    int x, y, z;
+                    for (y = 0; y < 16; y++) {
+                        for (z = 0; z < 16; z++) {
+                            for (x = 0; x < 16; x++) {
+                                if (section.opacity.get(x, y, z) == 0) {
+                                    section.opacity.set(x, y, z, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Spread (timed, for debug)
         boolean hasFaults;
         long startTime = System.currentTimeMillis();

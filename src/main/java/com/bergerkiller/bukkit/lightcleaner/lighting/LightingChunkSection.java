@@ -78,8 +78,8 @@ public class LightingChunkSection {
                         opacity = 0xf;
                         opaqueFaces = BlockFaceSet.ALL;
                     } else {
-                        if (opacity <= 0) {
-                            opacity = 1;
+                        if (opacity < 0) {
+                            opacity = 0;
                         }
                         opaqueFaces = info.getOpaqueFaces(owner.world, worldX+x, worldY+y, worldZ+z);
                     }
