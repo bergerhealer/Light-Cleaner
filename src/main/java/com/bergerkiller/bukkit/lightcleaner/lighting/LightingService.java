@@ -37,6 +37,7 @@ public class LightingService extends AsyncTask {
     private static boolean pendingFileInUse = false;
     private static LightingTask currentTask;
     private static boolean paused = false;
+    private static boolean lowOnMemory = false;
 
     /**
      * Gets whether this service is currently processing something
@@ -93,7 +94,9 @@ public class LightingService extends AsyncTask {
      */
     public static String getCurrentStatus() {
         final LightingTask current = currentTask;
-        if (current == null) {
+        if (lowOnMemory) {
+            return ChatColor.RED + "Too low on available memory (paused)";
+        } else if (current == null) {
             return "Finished.";
         } else {
             return current.getStatus();
@@ -572,9 +575,14 @@ public class LightingService extends AsyncTask {
                 LightCleaner.plugin.log(Level.WARNING, "Almost running out of memory still (" + (free >> 20) + "MB) ...waiting for a bit");
 
                 // Wait until memory drops below safe values. Do check if aborting!
-                while ((free = runtime.freeMemory()) < LightCleaner.minFreeMemory && !this.isStopRequested()) {
-                    sleep(10000);
-                    runtime.gc();
+                lowOnMemory = true;
+                try {
+                    while ((free = runtime.freeMemory()) < LightCleaner.minFreeMemory && !this.isStopRequested()) {
+                        sleep(30000);
+                        runtime.gc();
+                    }
+                } finally {
+                    lowOnMemory = false;
                 }
 
                 if (!this.isStopRequested()) {
