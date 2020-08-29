@@ -1,5 +1,6 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
+import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.LogicUtil;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
@@ -8,11 +9,13 @@ import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
 
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
+import java.util.stream.Stream;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;
@@ -42,7 +45,28 @@ public class LightingTaskBatch implements LightingTask {
 
     public LightingTaskBatch(World world, LongHashSet chunkCoordinates) {
         this.world = world;
-        this.chunks_coords = chunkCoordinates.toArray();
+
+        // Turn contents of the long hash set into an easily sortable IntVector2[] array
+        IntVector2[] coordinates = new IntVector2[chunkCoordinates.size()];
+        {
+            LongHashSet.LongIterator iter = chunkCoordinates.longIterator();
+            for (int i = 0; iter.hasNext(); i++) {
+                long coord = iter.next();
+                coordinates[i] = new IntVector2(MathUtil.longHashMsw(coord), MathUtil.longHashLsw(coord));
+            }
+        }
+
+        // Sort the array along the axis. This makes chunk loading more efficient.
+        Arrays.sort(coordinates, (a, b) -> {
+            int comp = Integer.compare(a.x, b.x);
+            if (comp == 0) {
+                comp = Integer.compare(a.z, b.z);
+            }
+            return comp;
+        });
+
+        // Turn back into a long[] array for memory efficiency
+        this.chunks_coords = Stream.of(coordinates).mapToLong(c -> MathUtil.longHashToLong(c.x, c.z)).toArray();
     }
 
     @Override
