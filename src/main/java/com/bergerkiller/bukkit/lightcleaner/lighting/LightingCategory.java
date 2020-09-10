@@ -27,7 +27,7 @@ public enum LightingCategory {
             for (z = chunk.start.z; z <= chunk.end.z; z++) {
                 for (x = chunk.start.x; x <= chunk.end.x; x++) {
                     light = 15;
-                    height = chunk.getHeight(x, z);
+                    height = chunk.getHeight(x, z) + 1;
                     for (y = chunk.maxY; y >= 0; y--) {
                         if ((section = chunk.sections[y >> 4]) == null) {
                             // Skip the remaining 15: they are all inaccessible as well
