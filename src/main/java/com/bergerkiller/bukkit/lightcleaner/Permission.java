@@ -4,8 +4,8 @@ import com.bergerkiller.bukkit.common.permissions.PermissionEnum;
 import org.bukkit.permissions.PermissionDefault;
 
 public class Permission extends PermissionEnum {
-    public static final Permission CLEAN = new Permission("lightcleaner.clean", PermissionDefault.OP, "Allows a player to fix lighting issues. All commands require this permission.");
-    public static final Permission CLEAN_AREA = new Permission("lightcleaner.clean.area", PermissionDefault.OP, "Allows a player to fix lighting issues in chunks around him with any radius");
+    public static final Permission CLEAN_VIEW = new Permission("lightcleaner.clean.view", PermissionDefault.OP, "Allows a player to fix lighting issues in chunks around the player within view radius");
+    public static final Permission CLEAN_ANY_RADIUS = new Permission("lightcleaner.clean.any", PermissionDefault.OP, "Allows a player to fix lighting issues in chunks around the player with any radius");
     public static final Permission CLEAN_BY_RADIUS = new Permission("lightcleaner.clean.radius", PermissionDefault.OP, "Allows a player to only fix a specific radius of chunks (example perm: lightcleaner.clean.radius.4)", 1);
     public static final Permission CLEAN_WORLD = new Permission("lightcleaner.clean.world", PermissionDefault.OP, "Allows a player to fix lighting issues in all the chunks of an entire world");
     public static final Permission STATUS = new Permission("lightcleaner.status", PermissionDefault.OP, "Allows a player to check the status of ongoing lighting operations");

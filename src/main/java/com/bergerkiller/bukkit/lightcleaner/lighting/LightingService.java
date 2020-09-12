@@ -732,6 +732,46 @@ public class LightingService extends AsyncTask {
             return this;
         }
 
+        private boolean checkRadiusPermission(CommandSender sender, int radius) throws NoPermissionException {
+            if (Permission.CLEAN_ANY_RADIUS.has(sender)) {
+                return true;
+            }
+
+            int maxRadius = 0;
+            if (Permission.CLEAN_VIEW.has(sender)) {
+                maxRadius = Bukkit.getServer().getViewDistance();
+                if (radius <= maxRadius) {
+                    return true;
+                }
+            }
+
+            if (Permission.CLEAN_BY_RADIUS.has(sender, Integer.toString(radius))) {
+                return true;
+            }
+
+            for (int i = 100; i >= 1; i--) {
+                if (Permission.CLEAN_BY_RADIUS.has(sender, Integer.toString(i))) {
+                    if (i > maxRadius) {
+                        maxRadius = i;
+                    }
+                    break;
+                }
+            }
+
+            if (radius <= maxRadius) {
+                return true;
+            }
+
+            if (maxRadius == 0) {
+                throw new NoPermissionException();
+            } else {
+                int n = (maxRadius * 2 + 1);
+                sender.sendMessage(ChatColor.RED + "You do not have permission to clean areas larger than " +
+                        n + " x " + n);
+                return false;
+            }
+        }
+
         /**
          * Parses the arguments specified in a command
          * 
@@ -760,26 +800,24 @@ public class LightingService extends AsyncTask {
 
                 // Permission handling
                 if (this.getDebugMakeCorrupted()) {
+                    // Permission for corrupting light
                     Permission.DIRTY_DEBUG.handle(sender);
-                } else if (entireWorld || !Permission.CLEAN_BY_RADIUS.has(sender, Integer.toString(this.getRadius()))) {
-                    Permission.CLEAN.handle(sender);
-                }
-                if (entireWorld) {
+                } else if (entireWorld) {
                     // Clean world permission
                     Permission.CLEAN_WORLD.handle(sender);
                 } else {
-                    // Check radius is less than the default, unless special permission is granted
-                    if (this.getRadius() > Bukkit.getServer().getViewDistance() && !Permission.CLEAN_AREA.has(sender)) {
-                        int n = (Bukkit.getServer().getViewDistance() * 2 + 1);
-                        sender.sendMessage(ChatColor.RED + "You do not have permission to clean areas larger than " +
-                                n + " x " + n);
-                        return false;
-                    }
-
                     // Check sender is a player
                     if (!(sender instanceof Player)) {
                         // Can't do this from console. TODO?
                         sender.sendMessage("This command is only available to players");
+                        return false;
+                    }
+
+                    // Check permissions for standard cleaning
+                    // Players with the CLEAN_ANY permission can clean any radius
+                    // Players with the CLEAN_VIEW permission can clean up to the view radius
+                    // Players with the CLEAN_BY_RADIUS permission can clean up to [radius]
+                    if (!checkRadiusPermission(sender, this.getRadius())) {
                         return false;
                     }
                 }
