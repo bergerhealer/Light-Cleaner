@@ -205,7 +205,12 @@ public class LightingTaskBatch implements LightingTask {
             try {
                 future.get(200, TimeUnit.MILLISECONDS);
                 return true;
-            } catch (InterruptedException | ExecutionException | TimeoutException e1) {}
+            } catch (InterruptedException | TimeoutException e1) {
+                // Ignore
+            } catch (ExecutionException ex) {
+                LightCleaner.plugin.getLogger().log(Level.SEVERE, "Error while processing", ex.getCause());
+                return false;
+            }
         }
         return false;
     }
