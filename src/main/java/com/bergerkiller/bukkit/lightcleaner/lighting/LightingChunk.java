@@ -28,10 +28,9 @@ import java.util.logging.Level;
  * - possible chunk resends are performed
  */
 public class LightingChunk {
-    public static final int SECTION_COUNT = 16;
     public static final int OB = ~0xf; // Outside blocks
     public static final int OC = ~0xff; // Outside chunk
-    public final LightingChunkSection[] sections = new LightingChunkSection[SECTION_COUNT];
+    public LightingChunkSection[] sections;
     public final LightingChunkNeighboring neighbors = new LightingChunkNeighboring();
     public final int[] heightmap = new int[256];
     public final World world;
@@ -51,6 +50,28 @@ public class LightingChunk {
         this.world = world;
         this.chunkX = x;
         this.chunkZ = z;
+    }
+
+    /**
+     * Gets the number of 16-high chunk sections used.
+     * This is normally 16.
+     * 
+     * @return section count
+     */
+    public int getSectionCount() {
+        return this.sections.length;
+    }
+
+    /**
+     * Gets the chunk section at a given y-coordinate.
+     * If no section is stored here, null is returned.
+     * 
+     * @param y Block y coordinate
+     * @return section at block y
+     */
+    public LightingChunkSection getSectionAtY(int y) {
+        int cy = y >> 4;
+        return (cy >= 0 && cy < this.sections.length) ? this.sections[cy] : null;
     }
 
     /**
@@ -83,7 +104,8 @@ public class LightingChunk {
         // Fill using chunk sections
         hasSkyLight = WorldUtil.getDimensionType(chunk.getWorld()).hasSkyLight();
         ChunkSection[] chunkSections = ChunkUtil.getSections(chunk);
-        for (int section = 0; section < SECTION_COUNT; section++) {
+        this.sections = new LightingChunkSection[chunkSections.length];
+        for (int section = 0; section < getSectionCount(); section++) {
             ChunkSection chunkSection = chunkSections[section];
             if (chunkSection != null) {
                 sections[section] = new LightingChunkSection(this, chunkSection, hasSkyLight);
@@ -92,7 +114,7 @@ public class LightingChunk {
 
         // Compute max y using sections that are available
         this.maxY = 0;
-        for (int section = SECTION_COUNT; section > 0; section--) {
+        for (int section = getSectionCount(); section > 0; section--) {
             if (sections[section - 1] != null) {
                 this.maxY = (section << 4) - 1;
                 break;
@@ -132,7 +154,7 @@ public class LightingChunk {
     // Checks for a higher light level, potentially outside of the current chunk section, on the same x/z
     // Selects the appropriate chunk slice of this chunk
     private int getLightIfHigherVertical(LightingCategory category, int old_light, int faceMask, int x, int y, int z) {
-        final LightingChunkSection section = this.sections[y >> 4];
+        final LightingChunkSection section = getSectionAtY(y);
         return (section == null) ? old_light : getLightIfHigher(category, section, old_light, faceMask, x, y & 0xf, z);
     }
 
@@ -140,7 +162,7 @@ public class LightingChunk {
     // Selects the appropriate neighbouring chunk
     private int getLightIfHigherNeighbour(LightingCategory category, int old_light, int faceMask, int x, int y, int z) {
         final LightingChunk chunk = (x & OB | z & OB) == 0 ? this : neighbors.get(x >> 4, z >> 4);
-        final LightingChunkSection section = chunk.sections[y >> 4];
+        final LightingChunkSection section = chunk.getSectionAtY(y);
         return (section == null) ? old_light : getLightIfHigher(category, section, old_light, faceMask, x & 0xf, y & 0xf, z & 0xf);
     }
 
@@ -251,7 +273,7 @@ public class LightingChunk {
     private void trySpreadBlockLight(int emitted, int faceMask, int x, int y, int z) {
         if (y >= 1 && y <= 254) {
             final LightingChunk chunk = (x & OB | z & OB) == 0 ? this : neighbors.get(x >> 4, z >> 4);
-            final LightingChunkSection section = chunk.sections[y >> 4];
+            final LightingChunkSection section = chunk.getSectionAtY(y);
             if (section != null) {
                 trySpreadBlockLightWithin(section, emitted, faceMask, x & 0xf, y & 0xf, z & 0xf);
             }
@@ -339,7 +361,7 @@ public class LightingChunk {
                 for (z = loop_start.z; z != loop_end.z; z += loop_increment) {
                     startY = category.getStartY(this, x, z);
                     for (y = startY; y > 0; y--) {
-                        if ((chunksection = this.sections[y >> 4]) == null) {
+                        if ((chunksection = getSectionAtY(y)) == null) {
                             // Skip this section entirely by setting y to the bottom of the section
                             y &= ~0xf;
                             continue;
@@ -417,8 +439,9 @@ public class LightingChunk {
     @SuppressWarnings("unchecked")
     public CompletableFuture<Boolean> saveToChunk(Chunk chunk) {
         ChunkSection[] chunkSections = ChunkUtil.getSections(chunk);
-        final CompletableFuture<Boolean>[] futures = new CompletableFuture[chunkSections.length];
-        for (int section = 0; section < SECTION_COUNT; section++) {
+        int numSectionsToApply = Math.min(chunkSections.length, getSectionCount());
+        final CompletableFuture<Boolean>[] futures = new CompletableFuture[numSectionsToApply];
+        for (int section = 0; section < numSectionsToApply; section++) {
             if (chunkSections[section] != null && sections[section] != null) {
                 futures[section] = sections[section].saveToChunk(chunkSections[section]);
             } else {
