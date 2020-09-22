@@ -106,7 +106,7 @@ public class LightCleaner extends PluginBase {
 
     @Override
     public void updateDependency(Plugin plugin, String pluginName, boolean enabled) {
-        if (worldEditHandlerEnabled && pluginName.equals("WorldEdit")) {
+        if (worldEditHandlerEnabled && providesWorldEdit(plugin)) {
             if (enabled && worldEditHandler == null) {
                 try {
                     Class.forName("com.boydti.fawe.beta.IBatchProcessor");
@@ -120,6 +120,22 @@ public class LightCleaner extends PluginBase {
                 worldEditHandler = null;
                 log(Level.INFO, "WorldEdit was disabled, support for automatic light cleaning turned off");
             }
+        }
+    }
+
+    private static boolean providesWorldEdit(Plugin plugin) {
+        if (plugin.getName().equalsIgnoreCase("worldedit")) {
+            return true;
+        }
+        try {
+            for (String provide : plugin.getDescription().getProvides()) {
+                if ("worldedit".equalsIgnoreCase(provide)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Throwable t) {
+            return false;
         }
     }
 
