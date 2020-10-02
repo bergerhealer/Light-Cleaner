@@ -4,8 +4,8 @@ import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
-import com.bergerkiller.bukkit.lightcleaner.util.RegionInfo;
-import com.bergerkiller.bukkit.lightcleaner.util.RegionInfoMap;
+import com.bergerkiller.bukkit.lightcleaner.util.FlatRegionInfo;
+import com.bergerkiller.bukkit.lightcleaner.util.FlatRegionInfoMap;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -15,7 +15,7 @@ import org.bukkit.World;
 public class LightingTaskWorld implements LightingTask {
     private static final int ASSUMED_CHUNKS_PER_REGION = 34 * 34;
     private final World world;
-    private volatile RegionInfoMap regions = null;
+    private volatile FlatRegionInfoMap regions = null;
     private volatile int regionCountLoaded;
     private volatile int chunkCount;
     private volatile long timeStarted;
@@ -63,14 +63,14 @@ public class LightingTaskWorld implements LightingTask {
         CommonUtil.nextTick(() -> {
             try {
                 if (this.options.getLoadedChunksOnly()) {
-                    this.regions = RegionInfoMap.createLoaded(this.getWorld());
+                    this.regions = FlatRegionInfoMap.createLoaded(this.getWorld());
                     this.regionCountLoaded = this.regions.getRegionCount();
                     this.chunkCount = 0;
-                    for (RegionInfo region : this.regions.getRegions()) {
+                    for (FlatRegionInfo region : this.regions.getRegions()) {
                         this.chunkCount += region.getChunkCount();
                     }
                 } else {
-                    this.regions = RegionInfoMap.create(this.getWorld());
+                    this.regions = FlatRegionInfoMap.create(this.getWorld());
                     this.regionCountLoaded = 0;
                     this.chunkCount = this.regions.getRegionCount() * ASSUMED_CHUNKS_PER_REGION;
                 }
@@ -96,7 +96,7 @@ public class LightingTaskWorld implements LightingTask {
 
         // Start loading all chunks contained in the regions
         if (!this.options.getLoadedChunksOnly()) {
-            for (RegionInfo region : this.regions.getRegions()) {
+            for (FlatRegionInfo region : this.regions.getRegions()) {
                 // Abort handling
                 if (this.aborted) {
                     return;
@@ -111,7 +111,7 @@ public class LightingTaskWorld implements LightingTask {
 
         // We now know of all the regions to be processed, convert all of them into tasks
         // Use a slightly larger area to avoid cross-region errors
-        for (RegionInfo region : regions.getRegions()) {
+        for (FlatRegionInfo region : regions.getRegions()) {
             // Abort handling
             if (this.aborted) {
                 return;
@@ -121,6 +121,9 @@ public class LightingTaskWorld implements LightingTask {
             if (region.getChunkCount() == 0) {
                 continue;
             }
+
+            // Find region Y-coordinates for this 34x34 section of chunks
+            int[] region_y_coordinates = regions.getRegionYCoordinatesSelfAndNeighbours(region);
 
             // Reduce count, schedule and clear the buffer
             // Put the coordinates that are available
@@ -151,7 +154,7 @@ public class LightingTaskWorld implements LightingTask {
 
             // Schedule and return amount of chunks
             this.chunkCount -= buffer.size();
-            LightingTaskBatch batch_task = new LightingTaskBatch(this.getWorld(), buffer);
+            LightingTaskBatch batch_task = new LightingTaskBatch(this.getWorld(), region_y_coordinates, buffer);
             batch_task.applyOptions(this.options);
             LightingService.schedule(batch_task);
         }

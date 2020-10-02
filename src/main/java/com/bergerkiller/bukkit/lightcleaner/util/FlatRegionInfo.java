@@ -1,6 +1,8 @@
 package com.bergerkiller.bukkit.lightcleaner.util;
 
+import java.util.Arrays;
 import java.util.BitSet;
+import java.util.stream.IntStream;
 
 import org.bukkit.World;
 
@@ -10,21 +12,39 @@ import com.bergerkiller.bukkit.common.utils.WorldUtil;
  * Loads region information, storing whether or not
  * the 32x32 (1024) chunks are available.
  */
-public class RegionInfo {
+public class FlatRegionInfo {
+    private static final int[] DEFAULT_RY_0 = new int[] {0}; // Optimization
     public final World world;
     public final int rx, rz;
+    public final int[] ry;
     public final int cx, cz;
     private final BitSet _chunks;
     private boolean _loadedFromDisk;
 
-    public RegionInfo(World world, int rx, int rz) {
+    public FlatRegionInfo(World world, int rx, int ry, int rz) {
+        this(world, rx, (ry==0) ? DEFAULT_RY_0 : new int[] {ry}, rz);
+    }
+
+    public FlatRegionInfo(World world, int rx, int[] ry, int rz) {
         this.world = world;
         this.rx = rx;
         this.rz = rz;
+        this.ry = ry;
         this.cx = (rx << 5);
         this.cz = (rz << 5);
         this._chunks = new BitSet(1024);
         this._loadedFromDisk = false;
+    }
+
+    private FlatRegionInfo(FlatRegionInfo copy, int[] new_ry) {
+        this.world = copy.world;
+        this.rx = copy.rx;
+        this.ry = new_ry;
+        this.rz = copy.rz;
+        this.cx = copy.cx;
+        this.cz = copy.cz;
+        this._chunks = copy._chunks;
+        this._loadedFromDisk = copy._loadedFromDisk;
     }
 
     public void addChunk(int cx, int cz) {
@@ -47,12 +67,23 @@ public class RegionInfo {
     }
 
     /**
+     * Gets the region Y-coordinates as a sorted, immutable distinct stream
+     * 
+     * @return ry int stream
+     */
+    public IntStream getRYStream() {
+        return IntStream.of(this.ry);
+    }
+
+    /**
      * Loads the region information, now telling what chunks are contained
      */
     public void load() {
         if (!this._loadedFromDisk) {
             this._loadedFromDisk = true;
-            this._chunks.or(WorldUtil.getWorldSavedRegionChunks(this.world, this.rx, this.rz));
+            for (int ry : this.ry) {
+                this._chunks.or(WorldUtil.getWorldSavedRegionChunks3(this.world, this.rx, ry, this.rz));
+            }
         }
     }
 
@@ -98,4 +129,25 @@ public class RegionInfo {
         return this._chunks.get((cz << 5) | cx);
     }
 
+    /**
+     * Adds another Region Y-coordinate to the list.
+     * The set of chunks and other properties are copied.
+     * 
+     * @param ry
+     * @return new flat region info object with updated ry
+     */
+    public FlatRegionInfo addRegionYCoordinate(int ry) {
+        int index = Arrays.binarySearch(this.ry, ry);
+        if (index >= 0) {
+            return this; // Already contained
+        }
+
+        // Insert at this index (undo insertion point - 1)
+        index = -index - 1;
+        int[] new_y_coordinates = new int[this.ry.length + 1];
+        System.arraycopy(this.ry, 0, new_y_coordinates, 0, index);
+        new_y_coordinates[index] = ry;
+        System.arraycopy(this.ry, index, new_y_coordinates, index+1, this.ry.length - index);
+        return new FlatRegionInfo(this, new_y_coordinates);
+    }
 }

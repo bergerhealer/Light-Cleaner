@@ -22,14 +22,14 @@ public enum LightingCategory {
             // Find out the highest possible Y-position
             int x, y, z, light, height, opacity;
             BlockFaceSet opaqueFaces;
-            LightingChunkSection section;
+            LightingCube cube = null;
             // Apply initial sky lighting from top to bottom
             for (z = chunk.start.z; z <= chunk.end.z; z++) {
                 for (x = chunk.start.x; x <= chunk.end.x; x++) {
                     light = 15;
                     height = chunk.getHeight(x, z) + 1;
-                    for (y = chunk.maxY; y >= 0; y--) {
-                        if ((section = chunk.sections[y >> 4]) == null) {
+                    for (y = chunk.maxY; y >= chunk.minY; y--) {
+                        if ((cube = chunk.nextCube(cube, y)) == null) {
                             // Skip the remaining 15: they are all inaccessible as well
                             y -= 15;
 
@@ -42,17 +42,17 @@ public enum LightingCategory {
 
                         // Set quickly when light level is at 0, or we are above height level
                         if (y > height || light <= 0) {
-                            section.skyLight.set(x, y & 0xf, z, light);
+                            cube.skyLight.set(x, y & 0xf, z, light);
                             continue;
                         }
 
                         // If opaque at the top, set light to 0 instantly
-                        opaqueFaces = section.getOpaqueFaces(x, y & 0xf, z);
+                        opaqueFaces = cube.getOpaqueFaces(x, y & 0xf, z);
                         if (opaqueFaces.up()) {
                             light = 0;
                         } else {
                             // Apply the opacity to the light level
-                            opacity = section.opacity.get(x, y & 0xf, z);
+                            opacity = cube.opacity.get(x, y & 0xf, z);
                             if (light < 15 && opacity == 0) {
                                 opacity = 1;
                             }
@@ -62,8 +62,8 @@ public enum LightingCategory {
                         }
 
                         // Apply sky light to block
-                        section.skyLight.set(x, y & 0xf, z, light);
-
+                        cube.skyLight.set(x, y & 0xf, z, light);
+                        
                         // If opaque at the bottom, reset light to 0 for next block
                         // The block itself is lit
                         if (opaqueFaces.down()) {
@@ -85,12 +85,12 @@ public enum LightingCategory {
         }
 
         @Override
-        public int get(LightingChunkSection section, int x, int y, int z) {
-            return  section.skyLight.get(x, y, z);
+        public int get(LightingCube section, int x, int y, int z) {
+            return section.skyLight.get(x, y, z);
         }
 
         @Override
-        public void set(LightingChunkSection section, int x, int y, int z, int level) {
+        public void set(LightingCube section, int x, int y, int z, int level) {
             section.skyLight.set(x, y, z, level);
         }
     },
@@ -106,18 +106,15 @@ public enum LightingCategory {
             // They still emit light through the opaque faces to other blocks
             // To fix this, run an initial processing step that spreads all
             // emitted light to the neighbouring blocks' block light, ignoring own opaque faces
-            int y_off = 0, x, y, z;
-            for (LightingChunkSection section : chunk.sections) {
-                if (section != null) {
-                    for (y = 0; y <= 15; y++) {
-                        for (z = chunk.start.z; z <= chunk.end.z; z++) {
-                            for (x = chunk.start.x; x <= chunk.end.x; x++) {
-                                chunk.spreadBlockLight(section, x, y + y_off, z);
-                            }
+            int x, y, z;
+            for (LightingCube cube : chunk.getSections()) {
+                for (y = 0; y < 16; y++) {
+                    for (z = chunk.start.z; z <= chunk.end.z; z++) {
+                        for (x = chunk.start.x; x <= chunk.end.x; x++) {
+                            cube.spreadBlockLight(x, y, z);
                         }
                     }
                 }
-                y_off += 16;
             }
         }
 
@@ -132,12 +129,12 @@ public enum LightingCategory {
         }
 
         @Override
-        public int get(LightingChunkSection section, int x, int y, int z) {
+        public int get(LightingCube section, int x, int y, int z) {
             return section.blockLight.get(x, y, z);
         }
 
         @Override
-        public void set(LightingChunkSection section, int x, int y, int z, int level) {
+        public void set(LightingCube section, int x, int y, int z, int level) {
             section.blockLight.set(x, y, z, level);
         }
     };
@@ -185,7 +182,7 @@ public enum LightingCategory {
      * @param z
      * @return light level
      */
-    public abstract int get(LightingChunkSection section, int x, int y, int z);
+    public abstract int get(LightingCube section, int x, int y, int z);
 
     /**
      * Sets the light level in a section at the coordinates specified.
@@ -197,5 +194,5 @@ public enum LightingCategory {
      * @param z
      * @param level
      */
-    public abstract void set(LightingChunkSection section, int x, int y, int z, int level);
+    public abstract void set(LightingCube section, int x, int y, int z, int level);
 }

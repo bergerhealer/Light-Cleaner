@@ -2,6 +2,7 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.AsyncTask;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
+import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.config.CompressedDataReader;
 import com.bergerkiller.bukkit.common.config.CompressedDataWriter;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
@@ -13,8 +14,9 @@ import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.bukkit.lightcleaner.Permission;
-import com.bergerkiller.bukkit.lightcleaner.util.RegionInfo;
-import com.bergerkiller.bukkit.lightcleaner.util.RegionInfoMap;
+import com.bergerkiller.bukkit.lightcleaner.util.FlatRegionInfo;
+import com.bergerkiller.bukkit.lightcleaner.util.FlatRegionInfoMap;
+import com.bergerkiller.bukkit.lightcleaner.util.LightingUtil;
 
 import org.bukkit.*;
 import org.bukkit.command.CommandSender;
@@ -28,7 +30,7 @@ import java.util.*;
 import java.util.logging.Level;
 
 public class LightingService extends AsyncTask {
-    private static final Set<String> recipientsForDone = new HashSet<String>();
+    private static final Set<RecipientWhenDone> recipientsForDone = new HashSet<RecipientWhenDone>();
     private static final LinkedList<LightingTask> tasks = new LinkedList<LightingTask>();
     private static final int PENDING_WRITE_INTERVAL = 10;
     private static AsyncTask fixThread = null;
@@ -121,7 +123,7 @@ public class LightingService extends AsyncTask {
      */
     public static void addRecipient(CommandSender sender) {
         synchronized (recipientsForDone) {
-            recipientsForDone.add((sender instanceof Player) ? sender.getName() : null);
+            recipientsForDone.add(new RecipientWhenDone(sender));
         }
     }
 
@@ -183,6 +185,7 @@ public class LightingService extends AsyncTask {
         if (chunks.size() <= (34*34)) {
 
             LongHashSet chunks_filtered = new LongHashSet(chunks.size());
+            Set<IntVector2> region_coords_filtered = new HashSet<IntVector2>();
             LongIterator iter = chunks.longIterator();
 
             if (args.getLoadedChunksOnly()) {
@@ -193,6 +196,9 @@ public class LightingService extends AsyncTask {
                     int cz = MathUtil.longHashLsw(chunk);
                     if (WorldUtil.isLoaded(args.getWorld(), cx, cz)) {
                         chunks_filtered.add(chunk);
+                        region_coords_filtered.add(new IntVector2(
+                                WorldUtil.chunkToRegionIndex(cx),
+                                WorldUtil.chunkToRegionIndex(cz)));
                     }
                 }
             } else if (LightCleaner.skipWorldEdge) {
@@ -215,6 +221,9 @@ public class LightingService extends AsyncTask {
 
                     if (fully_loaded) {
                         chunks_filtered.add(chunk);
+                        region_coords_filtered.add(new IntVector2(
+                                WorldUtil.chunkToRegionIndex(cx),
+                                WorldUtil.chunkToRegionIndex(cz)));
                     }
                 }
             } else {
@@ -226,13 +235,25 @@ public class LightingService extends AsyncTask {
                     int cz = MathUtil.longHashLsw(chunk);
                     if (WorldUtil.isChunkAvailable(args.getWorld(), cx, cz)) {
                         chunks_filtered.add(chunk);
+                        region_coords_filtered.add(new IntVector2(
+                                WorldUtil.chunkToRegionIndex(cx),
+                                WorldUtil.chunkToRegionIndex(cz)));
                     }
                 }
             }
 
+            // For all filtered chunk coordinates, compute regions
+            int[] regionYCoordinates;
+            {
+                Set<IntVector3> regions = WorldUtil.getWorldRegions3ForXZ(args.getWorld(), region_coords_filtered);
+
+                // Simplify to just the unique Y-coordinates
+                regionYCoordinates = regions.stream().mapToInt(r -> r.y).sorted().distinct().toArray();
+            }
+
             // Schedule it
             if (!chunks_filtered.isEmpty()) {
-                LightingTaskBatch task = new LightingTaskBatch(args.getWorld(), chunks_filtered);
+                LightingTaskBatch task = new LightingTaskBatch(args.getWorld(), regionYCoordinates, chunks_filtered);
                 task.applyOptions(args);
                 schedule(task);
             }
@@ -240,11 +261,11 @@ public class LightingService extends AsyncTask {
         }
 
         // Too many chunks requested. Separate the operations per region file with small overlap.
-        RegionInfoMap regions;
+        FlatRegionInfoMap regions;
         if (args.getLoadedChunksOnly()) {
-            regions = RegionInfoMap.createLoaded(args.getWorld());
+            regions = FlatRegionInfoMap.createLoaded(args.getWorld());
         } else {
-            regions = RegionInfoMap.create(args.getWorld());
+            regions = FlatRegionInfoMap.create(args.getWorld());
         }
 
         LongIterator iter = chunks.longIterator();
@@ -253,13 +274,17 @@ public class LightingService extends AsyncTask {
             long first_chunk = iter.next();
             int first_chunk_x = MathUtil.longHashMsw(first_chunk);
             int first_chunk_z = MathUtil.longHashLsw(first_chunk);
-            RegionInfo region = regions.getRegion(first_chunk_x, first_chunk_z);
+            FlatRegionInfo region = regions.getRegionAtChunk(first_chunk_x, first_chunk_z);
             if (region == null || scheduledRegions.contains(region.rx, region.rz)) {
                 continue; // Does not exist or already scheduled
             }
             if (!region.containsChunk(first_chunk_x, first_chunk_z)) {
                 continue; // Chunk does not exist in world (not generated yet) or isn't loaded (loaded chunks only option)
             }
+
+            // Collect all the region Y coordinates used for this region and the neighbouring regions
+            // This makes sure we find all chunk slices we might need on an infinite height world
+            int[] region_y_coordinates = regions.getRegionYCoordinatesSelfAndNeighbours(region);
 
             // Collect all chunks to process for this region.
             // This is an union of the 34x34 area of chunks and the region file data set
@@ -292,7 +317,7 @@ public class LightingService extends AsyncTask {
             // Schedule the region
             if (!buffer.isEmpty()) {
                 scheduledRegions.add(region.rx, region.rz);
-                LightingTaskBatch task = new LightingTaskBatch(args.getWorld(), buffer);
+                LightingTaskBatch task = new LightingTaskBatch(args.getWorld(), region_y_coordinates, buffer);
                 task.applyOptions(args);
                 schedule(task);
             }
@@ -322,6 +347,15 @@ public class LightingService extends AsyncTask {
             @Override
             public void read(DataInputStream stream) throws IOException {
                 final int count = stream.readInt();
+                int version = 1;
+                if (count < 0) {
+                    version = stream.readByte() & 0xFF;
+                    if (version != 2) {
+                        LightCleaner.plugin.log(Level.WARNING, "PendingLight.dat stores an older or newer data format that is not supported");
+                        return;
+                    }
+                }
+
                 // Empty file? Strange, but ignore it then
                 if (count == 0) {
                     return;
@@ -338,20 +372,40 @@ public class LightingService extends AsyncTask {
                             missingWorlds.add(worldName);
                         }
                     }
-                    final int chunkCount = stream.readInt();
+
+                    // Load all the region coordinates
+                    final int regionYCoordinateCount = stream.readInt();
+                    int[] regions;
                     if (world == null) {
-                        stream.skip(chunkCount * (Long.SIZE / Byte.SIZE));
-                        continue;
+                        regions = null;
+                        stream.skip(regionYCoordinateCount * (Integer.SIZE / Byte.SIZE));
+                    } else {
+                        regions = new int[regionYCoordinateCount];
+                        for (int i = 0; i < regionYCoordinateCount; i++) {
+                            regions[i] = stream.readInt();
+                        }
                     }
 
                     // Load all the coordinates
-                    long[] coords = new long[chunkCount];
-                    for (int i = 0; i < chunkCount; i++) {
-                        coords[i] = stream.readLong();
+                    final int chunkCount = stream.readInt();
+                    long[] coords;
+                    if (world == null) {
+                        coords = null;
+                        stream.skip(chunkCount * (Long.SIZE / Byte.SIZE));
+                    } else {
+                        coords = new long[chunkCount];
+                        for (int i = 0; i < chunkCount; i++) {
+                            coords[i] = stream.readLong();
+                        }
+                    }
+
+                    // Skip if world isn't loaded
+                    if (world == null) {
+                        continue;
                     }
 
                     // Schedule and clear
-                    schedule(new LightingTaskBatch(world, coords));
+                    schedule(new LightingTaskBatch(world, regions, coords));
                 }
             }
         }.read()) {
@@ -397,10 +451,18 @@ public class LightingService extends AsyncTask {
             if (new CompressedDataWriter(tmpFile) {
                 @Override
                 public void write(DataOutputStream stream) throws IOException {
+                    stream.writeInt(-1); // Legacy version
+                    stream.writeByte(2); // Version ID
                     stream.writeInt(batches.size());
                     for (LightingTaskBatch batch : batches) {
                         // Write world name
                         stream.writeUTF(batch.getWorld().getName());
+                        // Write the range of Y-region coordinates to check
+                        int[] region_y_coordinates = batch.getRegionYCoordinates();
+                        stream.writeInt(region_y_coordinates.length);
+                        for (int region : region_y_coordinates) {
+                            stream.writeInt(region);
+                        }
                         // Write all chunks
                         long[] chunks = batch.getChunks();
                         stream.writeInt(chunks.length);
@@ -507,10 +569,12 @@ public class LightingService extends AsyncTask {
             // Messages
             final String message = ChatColor.GREEN + "All lighting operations are completed.";
             synchronized (recipientsForDone) {
-                for (String player : recipientsForDone) {
-                    CommandSender recip = player == null ? Bukkit.getConsoleSender() : Bukkit.getPlayer(player);
+                for (RecipientWhenDone recipient : recipientsForDone) {
+                    CommandSender recip = recipient.player_name == null ?
+                            Bukkit.getConsoleSender() : Bukkit.getPlayer(recipient.player_name);
                     if (recip != null) {
-                        recip.sendMessage(message);
+                        String timeStr = LightingUtil.formatDuration(System.currentTimeMillis() - recipient.timeStarted);
+                        recip.sendMessage(message + ChatColor.WHITE + " (Took " + timeStr + ")");
                     }
                 }
                 recipientsForDone.clear();
@@ -884,6 +948,16 @@ public class LightingService extends AsyncTask {
          */
         public static ScheduleArguments create() {
             return new ScheduleArguments();
+        }
+    }
+
+    private static class RecipientWhenDone {
+        public final String player_name;
+        public final long timeStarted;
+
+        public RecipientWhenDone(CommandSender sender) {
+            this.player_name = (sender instanceof Player) ? sender.getName() : null;
+            this.timeStarted = System.currentTimeMillis();
         }
     }
 }

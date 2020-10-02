@@ -29,6 +29,7 @@ public class LightingTaskBatch implements LightingTask {
     private static boolean DEBUG_LOG = false; // logs performance stats
     public final World world;
     private final Object chunks_lock = new Object();
+    private final int[] region_y_coords;
     private volatile LightingChunk[] chunks = null;
     private volatile long[] chunks_coords;
     private boolean done = false;
@@ -38,13 +39,15 @@ public class LightingTaskBatch implements LightingTask {
     private volatile Stage stage = Stage.LOADING;
     private LightingService.ScheduleArguments options = new LightingService.ScheduleArguments();
 
-    public LightingTaskBatch(World world, long[] chunkCoordinates) {
+    public LightingTaskBatch(World world, int[] regionYCoordinates, long[] chunkCoordinates) {
         this.world = world;
+        this.region_y_coords = regionYCoordinates;
         this.chunks_coords = chunkCoordinates;
     }
 
-    public LightingTaskBatch(World world, LongHashSet chunkCoordinates) {
+    public LightingTaskBatch(World world, int[] regionYCoordinates, LongHashSet chunkCoordinates) {
         this.world = world;
+        this.region_y_coords = regionYCoordinates;
 
         // Turn contents of the long hash set into an easily sortable IntVector2[] array
         IntVector2[] coordinates = new IntVector2[chunkCoordinates.size()];
@@ -74,6 +77,13 @@ public class LightingTaskBatch implements LightingTask {
         return world;
     }
 
+    /**
+     * Gets the X and Z-coordinates of all the chunk columns to process.
+     * The coordinates are combined into a single Long, which can be decoded
+     * using {@link MathUtil#longHashMsw(long)} for X and {@link MathUtil#longHashLsw(long) for Z.
+     * 
+     * @return chunk coordinates
+     */
     public long[] getChunks() {
         synchronized (this.chunks_lock) {
             LightingChunk[] chunks = this.chunks;
@@ -89,6 +99,16 @@ public class LightingTaskBatch implements LightingTask {
                 return new long[0];
             }
         }
+    }
+
+    /**
+     * Gets the Y-coordinates of all the regions to look for chunk data. A region stores 32 chunk
+     * slices vertically, and goes up/down 512 blocks every coordinate increase/decrease.
+     * 
+     * @return region Y-coordinates
+     */
+    public int[] getRegionYCoordinates() {
+        return this.region_y_coords;
     }
 
     @Override
@@ -368,13 +388,21 @@ public class LightingTaskBatch implements LightingTask {
         CompletableFuture<Void> chunkFillFuture = CompletableFuture.runAsync(() -> {
             synchronized (this.chunks_lock) {
                 for (LightingChunk lc : chunks) {
-                    lc.fill(lc.forcedChunk.getChunk());
+                    lc.fill(lc.forcedChunk.getChunk(), region_y_coords);
                 }
             }
         }, CommonUtil.getPluginExecutor(LightCleaner.plugin));
 
         if (!waitForCheckAborted(chunkFillFuture)) {
             return;
+        }
+
+        // Now that all chunks we can process are filled, let all the 16x16x16 cubes know of their neighbors
+        // This neighboring data is only used during the fix() (initialize + spread) phase
+        synchronized (this.chunks_lock) {
+            for (LightingChunk lc : chunks) {
+                lc.detectCubeNeighbors();
+            }
         }
 
         // Fix
@@ -485,16 +513,14 @@ public class LightingTaskBatch implements LightingTask {
         // This isn't done during initialization because it is important
         // for calculating the first opacity>0 block for sky light.
         for (LightingChunk chunk : chunks) {
-            for (LightingChunkSection section : chunk.sections) {
-                if (section != null) {
-                    //TODO: Maybe build something into BKCommonLib for this
-                    int x, y, z;
-                    for (y = 0; y < 16; y++) {
-                        for (z = 0; z < 16; z++) {
-                            for (x = 0; x < 16; x++) {
-                                if (section.opacity.get(x, y, z) == 0) {
-                                    section.opacity.set(x, y, z, 1);
-                                }
+            for (LightingCube section : chunk.getSections()) {
+                //TODO: Maybe build something into BKCommonLib for this
+                int x, y, z;
+                for (y = 0; y < 16; y++) {
+                    for (z = 0; z < 16; z++) {
+                        for (x = 0; x < 16; x++) {
+                            if (section.opacity.get(x, y, z) == 0) {
+                                section.opacity.set(x, y, z, 1);
                             }
                         }
                     }
