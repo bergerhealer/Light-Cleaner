@@ -346,9 +346,12 @@ public class LightingService extends AsyncTask {
         if (!new CompressedDataReader(saveFile) {
             @Override
             public void read(DataInputStream stream) throws IOException {
-                final int count = stream.readInt();
                 int version = 1;
-                if (count < 0) {
+                if (stream.readInt() >= 0) {
+                    // Before version byte was added
+                    LightCleaner.plugin.log(Level.WARNING, "PendingLight.dat stores an older data format that is not supported");
+                    return;
+                } else {
                     version = stream.readByte() & 0xFF;
                     if (version != 2) {
                         LightCleaner.plugin.log(Level.WARNING, "PendingLight.dat stores an older or newer data format that is not supported");
@@ -357,6 +360,7 @@ public class LightingService extends AsyncTask {
                 }
 
                 // Empty file? Strange, but ignore it then
+                final int count = stream.readInt();
                 if (count == 0) {
                     return;
                 }
