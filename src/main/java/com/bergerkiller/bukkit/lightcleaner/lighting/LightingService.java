@@ -622,7 +622,7 @@ public class LightingService extends AsyncTask {
             runtime.gc();
 
             // If we exceed the limit, proceed to take further measures
-            if (runtime.freeMemory() >= LightCleaner.minFreeMemory) {
+            if (calcAvailableMemory(runtime) >= LightCleaner.minFreeMemory) {
                 return;
             }
 
@@ -634,7 +634,7 @@ public class LightingService extends AsyncTask {
                 }
             }
             runtime.gc();
-            long free = runtime.freeMemory();
+            long free = calcAvailableMemory(runtime);
             if (free >= LightCleaner.minFreeMemory) {
                 // Memory successfully reduced
                 LightCleaner.plugin.log(Level.WARNING, "All worlds saved. Free memory: " + (free >> 20) + "MB. Continueing...");
@@ -645,7 +645,7 @@ public class LightingService extends AsyncTask {
                 // Wait until memory drops below safe values. Do check if aborting!
                 lowOnMemory = true;
                 try {
-                    while ((free = runtime.freeMemory()) < LightCleaner.minFreeMemory && !this.isStopRequested()) {
+                    while ((free = calcAvailableMemory(runtime)) < LightCleaner.minFreeMemory && !this.isStopRequested()) {
                         sleep(30000);
                         runtime.gc();
                     }
@@ -657,6 +657,16 @@ public class LightingService extends AsyncTask {
                     LightCleaner.plugin.log(Level.WARNING, "Got enough memory again to resume (" + (free >> 20) + "MB)");
                 }
             }
+        }
+    }
+
+    private static long calcAvailableMemory(Runtime runtime) {
+        long max = runtime.maxMemory();
+        if (max == Long.MAX_VALUE) {
+            return Long.MAX_VALUE;
+        } else {
+            long used = (runtime.totalMemory() - runtime.freeMemory());
+            return (max - used);
         }
     }
 

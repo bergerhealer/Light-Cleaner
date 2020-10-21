@@ -94,6 +94,12 @@ public class LightCleaner extends PluginBase {
 
         config.save();
 
+        // Warn if no memory limit is set
+        if (Runtime.getRuntime().maxMemory() == Long.MAX_VALUE && minFreeMemory > 0) {
+            log(Level.WARNING, "No memory limitation is configured for Java. An out of memory condition might occur for large operations!");
+            log(Level.WARNING, "To silence this warning, set minFreeMemory to 0 in config.yml");
+        }
+
         LightingService.loadPendingBatches();
     }
 
