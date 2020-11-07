@@ -1,5 +1,6 @@
 package com.bergerkiller.bukkit.lightcleaner.impl;
 
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 
 import com.bergerkiller.bukkit.common.Task;
@@ -74,39 +75,62 @@ public class WorldEditHandler implements Handler {
     public static class LightCleanerAdapter extends AbstractDelegateExtent {
         private final org.bukkit.World _world;
         private final LongHashSet _chunks = new LongHashSet();
-        private final Task _commitTask;
+        private final Task _commitEarlyTask;
+        private final Task _commitLateTask;
+        private final AtomicInteger _ticksOfNoChanges = new AtomicInteger();
 
         public LightCleanerAdapter(Extent extent, org.bukkit.World world) {
             super(extent);
             this._world = world;
-            this._commitTask = new Task(LightCleaner.plugin) {
+
+            // This task runs every tick until 4 ticks go by with no changes
+            this._commitEarlyTask = new Task(LightCleaner.plugin) {
                 @Override
                 public void run() {
-                    // Include all the neighbouring chunks in the results
-                    LongHashSet chunksWithNeighbours = new LongHashSet(_chunks.size() * 2);
-                    LongIterator iter = _chunks.longIterator();
-                    while (iter.hasNext()) {
-                        long value = iter.next();
-                        chunksWithNeighbours.add(value);
-                        for (long n : NEIGHBOURS) {
-                            chunksWithNeighbours.add(MathUtil.longHashSumW(value, n));
-                        }
+                    if (_ticksOfNoChanges.incrementAndGet() >= 5) {
+                        scheduleCleanup();
                     }
+                }
+            };
 
-                    // Wipe old chunks mapping, further register() will spawn new tasks
-                    _chunks.clear();
-
-                    // Schedule them all
-                    LightingService.schedule(ScheduleArguments.create()
-                            .setWorld(_world)
-                            .setChunks(chunksWithNeighbours));
+            // This task runs guaranteed every 100 ticks
+            this._commitLateTask = new Task(LightCleaner.plugin) {
+                @Override
+                public void run() {
+                    scheduleCleanup();
                 }
             };
         }
 
-        public void register(int blockX, int blockZ) {
+        public synchronized void scheduleCleanup() {
+            // Include all the neighbouring chunks in the results
+            LongHashSet chunksWithNeighbours = new LongHashSet(_chunks.size() * 2);
+            LongIterator iter = _chunks.longIterator();
+            while (iter.hasNext()) {
+                long value = iter.next();
+                chunksWithNeighbours.add(value);
+                for (long n : NEIGHBOURS) {
+                    chunksWithNeighbours.add(MathUtil.longHashSumW(value, n));
+                }
+            }
+
+            // This task must be stopped now
+            _commitEarlyTask.stop();
+
+            // Wipe old chunks mapping, further register() will spawn new tasks
+            _chunks.clear();
+
+            // Schedule them all
+            LightingService.schedule(ScheduleArguments.create()
+                    .setWorld(_world)
+                    .setChunks(chunksWithNeighbours));
+        }
+
+        public synchronized void register(int blockX, int blockZ) {
+            _ticksOfNoChanges.set(0);
             if (_chunks.isEmpty()) {
-                this._commitTask.start();
+                _commitEarlyTask.start(1, 1);
+                _commitLateTask.start(100);
             }
             _chunks.add(MathUtil.toChunk(blockX), MathUtil.toChunk(blockZ));
         }
