@@ -137,18 +137,17 @@ public class LightingChunk {
         {
             // First create a list of ChunkSection objects storing the data
             // We must do this sequentially, because asynchronous access is not permitted
-            List<ChunkSection> chunkSectionList = IntStream.of(region_y_coordinates)
+            List<LightingCube.Data> chunkSectionList = IntStream.of(region_y_coordinates)
                     .map(WorldUtil::regionToChunkIndex)
                     .flatMap(base_cy -> IntStream.range(base_cy, base_cy + WorldUtil.CHUNKS_PER_REGION_AXIS))
                     .mapToObj(cy -> WorldUtil.getSection(chunk, cy))
                     .filter(section -> section != null)
+                    .map(section -> new LightingCube.Data(LightingChunk.this, section, hasSkyLight))
                     .collect(Collectors.toList());
 
             // Then process all the gathered chunk sections into a LightingChunkSection in parallel
             lightingChunkSectionList = chunkSectionList.stream()
-                    .parallel()
-                    .map(section -> new LightingCube(this, section, hasSkyLight))
-                    .collect(Collectors.toList());
+                    .parallel().map(LightingCube::new).collect(Collectors.toList());
         }
 
         // Add to mapping

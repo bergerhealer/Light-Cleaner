@@ -23,49 +23,15 @@ public class LightingCube {
     public final NibbleArrayHandle opacity;
     private final BlockFaceSetSection opaqueFaces;
 
-    public LightingCube(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
-        this.owner = owner;
-        this.cy = chunkSection.getY();
-
-        if (owner.neighbors.hasAll()) {
-            // Block light data (is re-initialized in the fill operation below, no need to read)
-            this.blockLight = NibbleArrayHandle.createNew();
-
-            // Sky light data (is re-initialized using heightmap operation later, no need to read)
-            if (hasSkyLight) {
-                this.skyLight = NibbleArrayHandle.createNew();
-            } else {
-                this.skyLight = null;
-            }
-        } else {
-            // We need to load the original light data, because we have a border that we do not update
-
-            // Block light data
-            byte[] blockLightData = WorldUtil.getSectionBlockLight(owner.world,
-                    owner.chunkX, this.cy, owner.chunkZ);
-            if (blockLightData != null) {
-                this.blockLight = NibbleArrayHandle.createNew(blockLightData);
-            } else {
-                this.blockLight = NibbleArrayHandle.createNew();
-            }
-
-            // Sky light data
-            if (hasSkyLight) {
-                byte[] skyLightData = WorldUtil.getSectionSkyLight(owner.world,
-                        owner.chunkX, this.cy, owner.chunkZ);
-                if (skyLightData != null) {
-                    this.skyLight = NibbleArrayHandle.createNew(skyLightData);
-                } else {
-                    this.skyLight = NibbleArrayHandle.createNew();
-                }
-            } else {
-                this.skyLight = null;
-            }
-        }
+    public LightingCube(Data currentData) {
+        this.owner = currentData.owner;
+        this.skyLight = currentData.currentSkyLight;
+        this.blockLight = currentData.currentBlockLight;
+        this.cy = currentData.chunkSection.getY();
 
         // World coordinates
         int worldX = owner.chunkX << 4;
-        int worldY = chunkSection.getYPosition();
+        int worldY = currentData.chunkSection.getYPosition();
         int worldZ = owner.chunkZ << 4;
 
         // Fill opacity and initial block lighting values
@@ -78,7 +44,7 @@ public class LightingCube {
         for (z = owner.start.z; z <= owner.end.z; z++) {
             for (x = owner.start.x; x <= owner.end.x; x++) {
                 for (y = 0; y < 16; y++) {
-                    info = chunkSection.getBlockData(x, y, z);
+                    info = currentData.chunkSection.getBlockData(x, y, z);
                     blockEmission = info.getEmission();
                     opacity = info.getOpacity(owner.world, worldX+x, worldY+y, worldZ+z);
                     if (opacity >= 0xf) {
@@ -315,4 +281,54 @@ public class LightingCube {
         return combined.thenApply((c) -> Boolean.TRUE);
     }
 
+    /**
+     * Stores just the lighting information read from the chunk
+     */
+    public static class Data {
+        public final LightingChunk owner;
+        public final ChunkSection chunkSection;
+        public final NibbleArrayHandle currentSkyLight;
+        public final NibbleArrayHandle currentBlockLight;
+
+        public Data(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
+            this.owner = owner;
+            this.chunkSection = chunkSection;
+
+            if (owner.neighbors.hasAll()) {
+                // Block light data (is re-initialized in the fill operation below, no need to read)
+                this.currentBlockLight = NibbleArrayHandle.createNew();
+
+                // Sky light data (is re-initialized using heightmap operation later, no need to read)
+                if (hasSkyLight) {
+                    this.currentSkyLight = NibbleArrayHandle.createNew();
+                } else {
+                    this.currentSkyLight = null;
+                }
+            } else {
+                // We need to load the original light data, because we have a border that we do not update
+
+                // Block light data
+                byte[] blockLightData = WorldUtil.getSectionBlockLight(owner.world,
+                        owner.chunkX, chunkSection.getY(), owner.chunkZ);
+                if (blockLightData != null) {
+                    this.currentBlockLight = NibbleArrayHandle.createNew(blockLightData);
+                } else {
+                    this.currentBlockLight = NibbleArrayHandle.createNew();
+                }
+
+                // Sky light data
+                if (hasSkyLight) {
+                    byte[] skyLightData = WorldUtil.getSectionSkyLight(owner.world,
+                            owner.chunkX, chunkSection.getY(), owner.chunkZ);
+                    if (skyLightData != null) {
+                        this.currentSkyLight = NibbleArrayHandle.createNew(skyLightData);
+                    } else {
+                        this.currentSkyLight = NibbleArrayHandle.createNew();
+                    }
+                } else {
+                    this.currentSkyLight = null;
+                }
+            }
+        }
+    }
 }
