@@ -2,6 +2,7 @@ name: ${project.name}
 main: com.bergerkiller.bukkit.lightcleaner.LightCleaner
 api-version: 1.13
 version: ${project.version}
+build: ${project.cibuild}
 authors: [bergerkiller]
 depend: [BKCommonLib]
 softdepend: [WorldEdit]
