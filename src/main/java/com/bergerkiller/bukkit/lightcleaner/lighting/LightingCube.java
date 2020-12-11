@@ -2,7 +2,9 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import java.util.concurrent.CompletableFuture;
 
+import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.collections.BlockFaceSet;
+import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
@@ -13,6 +15,7 @@ import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
  * A single 16x16x16 cube of stored block information
  */
 public class LightingCube {
+    public static IntVector3 DEBUG_BLOCK = null; // logs light levels of blocks
     public static final int OOC = ~0xf; // Outside Of Cube
     public final LightingChunk owner;
     public final LightingCubeNeighboring neighbors = new LightingCubeNeighboring();
@@ -23,11 +26,23 @@ public class LightingCube {
     public final NibbleArrayHandle opacity;
     private final BlockFaceSetSection opaqueFaces;
 
+    // Memory optimization for all-air cubes
+    private static final NibbleArrayHandle ALL_ZERO_NIBBLE_ARRAY = NibbleArrayHandle.createNew();
+    private static final BlockFaceSetSection ALL_TRANSPARENT_OPAQUE_FACES = new BlockFaceSetSection();
+
     public LightingCube(Data currentData) {
         this.owner = currentData.owner;
         this.skyLight = currentData.currentSkyLight;
         this.blockLight = currentData.currentBlockLight;
-        this.cy = currentData.chunkSection.getY();
+        this.cy = currentData.cy;
+
+        // Don't do anything more if there is no block data
+        if (currentData.chunkSection == null) {
+            this.opacity = ALL_ZERO_NIBBLE_ARRAY;
+            this.emittedLight = ALL_ZERO_NIBBLE_ARRAY;
+            this.opaqueFaces = ALL_TRANSPARENT_OPAQUE_FACES;
+            return;
+        }
 
         // World coordinates
         int worldX = owner.chunkX << 4;
@@ -202,10 +217,10 @@ public class LightingCube {
     /**
      * Applies the lighting information to a chunk section
      *
-     * @param chunkSection to save to
+     * @param force whether to force the save, even when light wasn't changed
      * @return future completed when saving is finished. Future resolves to False if no changes occurred, True otherwise.
      */
-    public CompletableFuture<Boolean> saveToChunk(ChunkSection chunkSection) {
+    public CompletableFuture<Boolean> saveToChunk(boolean force) {
         CompletableFuture<Void> blockLightFuture = null;
         CompletableFuture<Void> skyLightFuture = null;
 
@@ -215,7 +230,7 @@ public class LightingCube {
                 byte[] oldBlockLight = WorldUtil.getSectionBlockLight(owner.world,
                         owner.chunkX, this.cy, owner.chunkZ);
                 boolean blockLightChanged = false;
-                if (oldBlockLight == null || newBlockLight.length != oldBlockLight.length) {
+                if (force || oldBlockLight == null || newBlockLight.length != oldBlockLight.length) {
                     blockLightChanged = true;
                 } else {
                     for (int i = 0; i < oldBlockLight.length; i++) {
@@ -238,7 +253,7 @@ public class LightingCube {
                 byte[] oldSkyLight = WorldUtil.getSectionSkyLight(owner.world,
                         owner.chunkX, this.cy, owner.chunkZ);
                 boolean skyLightChanged = false;
-                if (oldSkyLight == null || newSkyLight.length != oldSkyLight.length) {
+                if (force || oldSkyLight == null || newSkyLight.length != oldSkyLight.length) {
                     skyLightChanged = true;
                 } else {
                     for (int i = 0; i < oldSkyLight.length; i++) {
@@ -260,6 +275,30 @@ public class LightingCube {
             CompletableFuture<Boolean> exceptionally = new CompletableFuture<Boolean>();
             exceptionally.completeExceptionally(t);
             return exceptionally;
+        }
+
+        // Debug block
+        if (DEBUG_BLOCK != null &&
+            DEBUG_BLOCK.getChunkX() == this.owner.chunkX &&
+            DEBUG_BLOCK.getChunkY() == this.cy &&
+            DEBUG_BLOCK.getChunkZ() == this.owner.chunkZ
+        ) {
+            String message = "Block [" + DEBUG_BLOCK.x + "/" + DEBUG_BLOCK.y + "/" + DEBUG_BLOCK.z + "]";
+            if (this.skyLight != null) {
+                int level = this.skyLight.get(DEBUG_BLOCK.x & 0xf, DEBUG_BLOCK.y & 0xf, DEBUG_BLOCK.z & 0xf);
+                message += " SkyLight=" + level;
+                if (skyLightFuture != null) {
+                    message += " [changed]";
+                }
+            }
+            if (this.blockLight != null) {
+                int level = this.blockLight.get(DEBUG_BLOCK.x & 0xf, DEBUG_BLOCK.y & 0xf, DEBUG_BLOCK.z & 0xf);
+                message += " BlockLight=" + level;
+                if (blockLightFuture != null) {
+                    message += " [changed]";
+                }
+            }
+            CommonUtil.broadcast(message);
         }
 
         // No updates performed
@@ -286,12 +325,14 @@ public class LightingCube {
      */
     public static class Data {
         public final LightingChunk owner;
+        public final int cy;
         public final ChunkSection chunkSection;
         public final NibbleArrayHandle currentSkyLight;
         public final NibbleArrayHandle currentBlockLight;
 
-        public Data(LightingChunk owner, ChunkSection chunkSection, boolean hasSkyLight) {
+        public Data(LightingChunk owner, int cy, ChunkSection chunkSection) {
             this.owner = owner;
+            this.cy = cy;
             this.chunkSection = chunkSection;
 
             if (owner.neighbors.hasAll()) {
@@ -299,7 +340,7 @@ public class LightingCube {
                 this.currentBlockLight = NibbleArrayHandle.createNew();
 
                 // Sky light data (is re-initialized using heightmap operation later, no need to read)
-                if (hasSkyLight) {
+                if (owner.hasSkyLight) {
                     this.currentSkyLight = NibbleArrayHandle.createNew();
                 } else {
                     this.currentSkyLight = null;
@@ -309,7 +350,7 @@ public class LightingCube {
 
                 // Block light data
                 byte[] blockLightData = WorldUtil.getSectionBlockLight(owner.world,
-                        owner.chunkX, chunkSection.getY(), owner.chunkZ);
+                        owner.chunkX, cy, owner.chunkZ);
                 if (blockLightData != null) {
                     this.currentBlockLight = NibbleArrayHandle.createNew(blockLightData);
                 } else {
@@ -317,9 +358,9 @@ public class LightingCube {
                 }
 
                 // Sky light data
-                if (hasSkyLight) {
+                if (owner.hasSkyLight) {
                     byte[] skyLightData = WorldUtil.getSectionSkyLight(owner.world,
-                            owner.chunkX, chunkSection.getY(), owner.chunkZ);
+                            owner.chunkX, cy, owner.chunkZ);
                     if (skyLightData != null) {
                         this.currentSkyLight = NibbleArrayHandle.createNew(skyLightData);
                     } else {

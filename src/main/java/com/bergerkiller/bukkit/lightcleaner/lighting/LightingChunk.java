@@ -5,7 +5,6 @@ import com.bergerkiller.bukkit.common.chunk.ForcedChunk;
 import com.bergerkiller.bukkit.common.collections.BlockFaceSet;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
-import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.common.wrappers.HeightMap;
 import com.bergerkiller.bukkit.common.wrappers.IntHashMap;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
@@ -133,7 +132,8 @@ public class LightingChunk {
         // Fill using chunk sections
         hasSkyLight = WorldUtil.getDimensionType(chunk.getWorld()).hasSkyLight();
 
-        List<LightingCube> lightingChunkSectionList;
+        int minSectionCy = 0;
+        int maxSectionCy = 0;
         {
             // First create a list of ChunkSection objects storing the data
             // We must do this sequentially, because asynchronous access is not permitted
@@ -142,35 +142,51 @@ public class LightingChunk {
                     .flatMap(base_cy -> IntStream.range(base_cy, base_cy + WorldUtil.CHUNKS_PER_REGION_AXIS))
                     .mapToObj(cy -> WorldUtil.getSection(chunk, cy))
                     .filter(section -> section != null)
-                    .map(section -> new LightingCube.Data(LightingChunk.this, section, hasSkyLight))
+                    .map(section -> new LightingCube.Data(LightingChunk.this, section.getY(), section))
                     .collect(Collectors.toList());
 
             // Then process all the gathered chunk sections into a LightingChunkSection in parallel
-            lightingChunkSectionList = chunkSectionList.stream()
+            List<LightingCube> lightingChunkSectionList = chunkSectionList.stream()
                     .parallel().map(LightingCube::new).collect(Collectors.toList());
-        }
 
-        // Add to mapping
-        this.sections = new IntHashMap<LightingCube>();
-        for (LightingCube lightingChunkSection : lightingChunkSectionList) {
-            this.sections.put(lightingChunkSection.cy, lightingChunkSection);
+            // Calculate min/max chunk section coordinates
+            // Make use of the fact that they are pre-sorted by y-coordinate
+            if (!lightingChunkSectionList.isEmpty()) {
+                minSectionCy = lightingChunkSectionList.get(0).cy;
+                maxSectionCy = lightingChunkSectionList.get(lightingChunkSectionList.size()-1).cy;
+            }
+
+            // Add to mapping
+            this.sections = new IntHashMap<LightingCube>();
+            for (LightingCube lightingChunkSection : lightingChunkSectionList) {
+                this.sections.put(lightingChunkSection.cy, lightingChunkSection);
+            }
         }
 
         // Compute min/max y using sections that are available
-        // Make use of the fact that they are pre-sorted by y-coordinate
-        this.minY = 0;
-        this.maxY = 0;
-        if (!lightingChunkSectionList.isEmpty()) {
-            this.minY = lightingChunkSectionList.get(0).cy << 4;
-            this.maxY = (lightingChunkSectionList.get(lightingChunkSectionList.size()-1).cy << 4) + 15;
+        this.minY = (minSectionCy << 4);
+        this.maxY = (maxSectionCy << 4) + 15;
+
+        // Insert sections storing dummy data between minY and maxY
+        // Allow for gaps to exist, but we must make sure surface-touching cubes have light stored
+        // Only do this if the distance isn't too extreme to prevent OOM
+        if (this.sections.size() >= 2 && (this.maxY - this.minY) < 4096) {
+            for (int cy = minSectionCy+1; cy < maxSectionCy; cy++) {
+                if (!this.sections.contains(cy)) {
+                    this.sections.put(cy, new LightingCube(new LightingCube.Data(this, cy, null)));
+                }
+            }
         }
 
         // Initialize and then load sky light heightmap information
         if (this.hasSkyLight) {
             HeightMap heightmap = ChunkUtil.getLightHeightMap(chunk, true);
+            int max_slice_y = 0;
             for (int x = 0; x < 16; ++x) {
                 for (int z = 0; z < 16; ++z) {
-                    this.heightmap[this.getHeightKey(x, z)] = Math.max(this.minY, heightmap.getHeight(x, z));
+                    int y = Math.max(this.minY, heightmap.getHeight(x, z));
+                    this.heightmap[this.getHeightKey(x, z)] = y;
+                    max_slice_y = Math.max(y, max_slice_y);
                 }
             }
         } else {
@@ -409,25 +425,16 @@ public class LightingChunk {
      * on the main thread when saving finishes.
      *
      * @param chunk to save to
+     * @param force whether to force the save, even when light wasn't changed
      * @return completable future completed when the chunk is saved,
      *         with value True passed when saving occurred, False otherwise
      */
     @SuppressWarnings("unchecked")
-    public CompletableFuture<Boolean> saveToChunk(Chunk chunk) {
+    public CompletableFuture<Boolean> saveToChunk(Chunk chunk, final boolean force) {
         // Create futures for saving to all the chunk sections in parallel
-        List<LightingCube> sectionsToSave = this.sections.values();
-        final CompletableFuture<Boolean>[] futures = new CompletableFuture[sectionsToSave.size()];
-        {
-            int futureIndex = 0;
-            for (LightingCube sectionToSave : sectionsToSave) {
-                ChunkSection sectionToWriteTo = WorldUtil.getSection(chunk, sectionToSave.cy);
-                if (sectionToWriteTo == null) {
-                    futures[futureIndex++] = CompletableFuture.completedFuture(Boolean.FALSE);
-                } else {
-                    futures[futureIndex++] = sectionToSave.saveToChunk(sectionToWriteTo);
-                }
-            }
-        }
+        final CompletableFuture<Boolean>[] futures = this.sections.values().stream()
+                .map(c -> c.saveToChunk(force))
+                .toArray(CompletableFuture[]::new);
 
         // When all of them complete, combine them into a single future
         // If any changes were made to the chunk, return True as completed value

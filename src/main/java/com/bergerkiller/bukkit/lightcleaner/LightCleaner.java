@@ -13,9 +13,12 @@ import org.bukkit.plugin.Plugin;
 
 import com.bergerkiller.bukkit.common.Common;
 import com.bergerkiller.bukkit.common.PluginBase;
+import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
+import com.bergerkiller.bukkit.common.utils.ParseUtil;
 import com.bergerkiller.bukkit.lightcleaner.impl.Handler;
+import com.bergerkiller.bukkit.lightcleaner.lighting.LightingCube;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
 
 public class LightCleaner extends PluginBase {
@@ -149,6 +152,25 @@ public class LightCleaner extends PluginBase {
     public boolean command(CommandSender sender, String command, String[] args) {
         try {
             String subCmd = (args.length == 0) ? "" : args[0];
+            if (subCmd.equalsIgnoreCase("debugblock")) {
+                // cleanlight debugblock <x> <y> <z>
+                Permission.BLOCK_DEBUG.handle(sender);
+                if (args.length >= 2 && args[1].equalsIgnoreCase("clear")) {
+                    LightingCube.DEBUG_BLOCK = null;
+                    sender.sendMessage(ChatColor.GREEN + "Cleared block being debugged");
+                } else if (args.length <= 3) {
+                    sender.sendMessage(ChatColor.RED + "/cleanlight debugblock <x> <y> <z>");
+                    sender.sendMessage(ChatColor.RED + "/cleanlight debugblock clear");
+                } else {
+                    int x = ParseUtil.parseInt(args[1], 0);
+                    int y = ParseUtil.parseInt(args[2], 0);
+                    int z = ParseUtil.parseInt(args[3], 0);
+                    LightingCube.DEBUG_BLOCK = new IntVector3(x, y, z);
+                    sender.sendMessage(ChatColor.GREEN + "Will show generated levels for block " +
+                            x + "/" + y + "/" + z);
+                }
+                return true;
+            }
             if (subCmd.equalsIgnoreCase("abort")) {
                 // cleanlight abort
                 Permission.ABORT.handle(sender);

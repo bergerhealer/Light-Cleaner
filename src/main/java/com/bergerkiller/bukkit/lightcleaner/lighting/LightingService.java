@@ -676,6 +676,7 @@ public class LightingService extends AsyncTask {
         private LongHashSet chunks;
         private boolean debugMakeCorrupted = false;
         private boolean loadedChunksOnly = false;
+        private boolean forceSaving = false;
         private int radius = Bukkit.getServer().getViewDistance();
 
         public boolean getDebugMakeCorrupted() {
@@ -684,6 +685,10 @@ public class LightingService extends AsyncTask {
 
         public boolean getLoadedChunksOnly() {
             return this.loadedChunksOnly;
+        }
+
+        public boolean getForceSaving() {
+            return this.forceSaving;
         }
 
         public int getRadius() {
@@ -743,6 +748,11 @@ public class LightingService extends AsyncTask {
 
         public ScheduleArguments setLoadedChunksOnly(boolean loadedChunksOnly) {
             this.loadedChunksOnly = loadedChunksOnly;
+            return this;
+        }
+
+        public ScheduleArguments setForceSaving(boolean forceSaving) {
+            this.forceSaving = forceSaving;
             return this;
         }
 
@@ -867,6 +877,8 @@ public class LightingService extends AsyncTask {
                         setDebugMakeCorrupted(true);
                     } else if (arg.equalsIgnoreCase("loaded")) {
                         setLoadedChunksOnly(true);
+                    } else if (arg.equalsIgnoreCase("force")) {
+                        setForceSaving(true);
                     } else if (i == 0 && arg.equalsIgnoreCase("world")) {
                         entireWorld = true;
                     } else if (entireWorld) {
@@ -935,6 +947,9 @@ public class LightingService extends AsyncTask {
                 } else {
                     message += "is now being fixed, this may take very long!";
                 }
+                if (this.getForceSaving()) {
+                    message += " (Forced Saving)";
+                }
                 sender.sendMessage(message);
                 sender.sendMessage(ChatColor.YELLOW + "To view the status, use /cleanlight status");
             } else {
@@ -948,6 +963,9 @@ public class LightingService extends AsyncTask {
                     message += "chunk area around you is currently being corrupted, introducing lighting issues...";
                 } else {
                     message += "chunk area around you is currently being fixed from lighting issues...";
+                }
+                if (this.getForceSaving()) {
+                    message += " (Forced Saving)";
                 }
                 sender.sendMessage(message);
             }

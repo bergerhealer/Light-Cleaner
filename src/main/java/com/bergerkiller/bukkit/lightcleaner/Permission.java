@@ -12,6 +12,7 @@ public class Permission extends PermissionEnum {
     public static final Permission ABORT = new Permission("lightcleaner.abort", PermissionDefault.OP, "Allows a player to abort all current lighting operations");
     public static final Permission PAUSE = new Permission("lightcleaner.pause", PermissionDefault.OP, "Allows a player to pause and resume lighting operations");
     public static final Permission DIRTY_DEBUG = new Permission("lightcleaner.dirty.debug", PermissionDefault.FALSE, "Allows a player to corrupt lighting instead of clean it (for debugging purposes)");
+    public static final Permission BLOCK_DEBUG = new Permission("lightcleaner.block.debug", PermissionDefault.OP, "Allows a player to mark blocks that will make light cleaner log the light level generated");
 
     private Permission(final String path, final PermissionDefault def, final String desc) {
         super(path, def, desc);
