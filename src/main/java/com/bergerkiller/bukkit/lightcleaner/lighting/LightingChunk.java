@@ -1,13 +1,13 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.bases.IntVector2;
-import com.bergerkiller.bukkit.common.chunk.ForcedChunk;
 import com.bergerkiller.bukkit.common.collections.BlockFaceSet;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.HeightMap;
 import com.bergerkiller.bukkit.common.wrappers.IntHashMap;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
+import com.bergerkiller.bukkit.lightcleaner.util.DelayClosedForcedChunk;
 import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
 
 import org.bukkit.Chunk;
@@ -48,7 +48,7 @@ public class LightingChunk {
     public IntVector2 end = new IntVector2(14, 14);
     public int minY = 0;
     public int maxY = 0;
-    public final ForcedChunk forcedChunk = ForcedChunk.none();
+    public final DelayClosedForcedChunk forcedChunk = DelayClosedForcedChunk.none();
     public volatile boolean loadingStarted = false;
 
     public LightingChunk(World world, int x, int z) {

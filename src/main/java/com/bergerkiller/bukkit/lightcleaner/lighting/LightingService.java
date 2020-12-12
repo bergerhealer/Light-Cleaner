@@ -507,7 +507,6 @@ public class LightingService extends AsyncTask {
         }
         currentTask = null;
         taskChunkCount = 0;
-        LightingForcedChunkCache.reset();
     }
 
     /**
@@ -586,7 +585,6 @@ public class LightingService extends AsyncTask {
             // Stop task and abort
             taskCounter = 0;
             setProcessing(false);
-            LightingForcedChunkCache.reset();
             savePendingBatches();
             return;
         } else {

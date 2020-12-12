@@ -273,7 +273,7 @@ public class LightingTaskBatch implements LightingTask {
 
             // Outside of the lock, start loading the next chunk
             final CompletableFuture<Void> f_nextChunkFuture = nextChunkFuture;
-            nextChunk.forcedChunk.move(LightingForcedChunkCache.get(world, nextChunk.chunkX, nextChunk.chunkZ));
+            nextChunk.forcedChunk.move(WorldUtil.forceChunkLoaded(world, nextChunk.chunkX, nextChunk.chunkZ));
             nextChunk.forcedChunk.getChunkAsync().whenComplete((chunk, t) -> {
                 synchronized (chunks_lock) {
                     numBeingLoaded--;
@@ -339,13 +339,6 @@ public class LightingTaskBatch implements LightingTask {
         CompletableFuture<Void> loadChunksFuture = this.loadChunks();
         if (!waitForCheckAborted(loadChunksFuture)) {
             return;
-        }
-
-        // Causes all chunks in cache not used for this task to unload
-        // All chunks of this task are put into the cache, instead
-        LightingForcedChunkCache.reset();
-        for (LightingChunk lc : LightingTaskBatch.this.chunks) {
-            LightingForcedChunkCache.store(lc.forcedChunk);
         }
 
         // All chunks that can be loaded, are now loaded.

@@ -13,6 +13,7 @@ import org.bukkit.plugin.Plugin;
 
 import com.bergerkiller.bukkit.common.Common;
 import com.bergerkiller.bukkit.common.PluginBase;
+import com.bergerkiller.bukkit.common.Task;
 import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
@@ -20,6 +21,7 @@ import com.bergerkiller.bukkit.common.utils.ParseUtil;
 import com.bergerkiller.bukkit.lightcleaner.impl.Handler;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingCube;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
+import com.bergerkiller.bukkit.lightcleaner.util.DelayClosedForcedChunk;
 
 public class LightCleaner extends PluginBase {
     public static LightCleaner plugin;
@@ -31,6 +33,13 @@ public class LightCleaner extends PluginBase {
     public static Set<String> unsavedWorldNames = new HashSet<String>();
     private boolean worldEditHandlerEnabled = false;
     private Handler worldEditHandler = null;
+
+    private final Task closeForcedChunksTask = new Task(this) {
+        @Override
+        public void run() {
+            DelayClosedForcedChunk.cleanup();
+        }
+    };
 
     public static boolean isWorldSaveEnabled(World world) {
         return !unsavedWorldNames.contains(world.getName());
@@ -104,11 +113,18 @@ public class LightCleaner extends PluginBase {
         }
 
         LightingService.loadPendingBatches();
+
+        // Start unloading forced chunks after a delay
+        // No real need to run this every tick, every 5 ticks is fine
+        closeForcedChunksTask.start(5, 5);
     }
 
     @Override
     public void disable() {        
         LightingService.abort();
+
+        closeForcedChunksTask.stop();
+        DelayClosedForcedChunk.clear();
 
         plugin = null;
     }
