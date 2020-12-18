@@ -5,6 +5,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.logging.Level;
 
+import com.bergerkiller.bukkit.lightcleaner.messages.MessageHandler;
+import com.bergerkiller.bukkit.lightcleaner.messages.TranslatableMessage;
 import org.bukkit.ChatColor;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
@@ -24,6 +26,7 @@ import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
 import com.bergerkiller.bukkit.lightcleaner.util.DelayClosedForcedChunk;
 
 public class LightCleaner extends PluginBase {
+    private static MessageHandler messageHandler;
     public static LightCleaner plugin;
     public static long minFreeMemory = 100 * 1024 * 1024;
     public static boolean autoCleanEnabled = false;
@@ -53,6 +56,10 @@ public class LightCleaner extends PluginBase {
     @Override
     public void permissions() {
         this.loadPermissions(Permission.class);
+    }
+
+    public static MessageHandler getMessageHandler() {
+        return messageHandler;
     }
 
     @Override
@@ -105,6 +112,9 @@ public class LightCleaner extends PluginBase {
         unsavedWorldNames.addAll(config.getList("unsavedWorldNames", String.class, Arrays.asList("dummyUnsavedWorldName")));
 
         config.save();
+
+        //Load messages
+        messageHandler = new MessageHandler();
 
         // Warn if no memory limit is set
         if (Runtime.getRuntime().maxMemory() == Long.MAX_VALUE && minFreeMemory > 0) {
@@ -173,17 +183,24 @@ public class LightCleaner extends PluginBase {
                 Permission.BLOCK_DEBUG.handle(sender);
                 if (args.length >= 2 && args[1].equalsIgnoreCase("clear")) {
                     LightingCube.DEBUG_BLOCK = null;
-                    sender.sendMessage(ChatColor.GREEN + "Cleared block being debugged");
+                    sender.sendMessage(TranslatableMessage.of("cleanlight.clear.block.debugged"));
+                    //sender.sendMessage(ChatColor.GREEN + "Cleared block being debugged");
                 } else if (args.length <= 3) {
-                    sender.sendMessage(ChatColor.RED + "/cleanlight debugblock <x> <y> <z>");
-                    sender.sendMessage(ChatColor.RED + "/cleanlight debugblock clear");
+                    sender.sendMessage(TranslatableMessage.of("cleanlight.usage.debugblock"));
+                    //sender.sendMessage(ChatColor.RED + "/cleanlight debugblock <x> <y> <z>");
+                    sender.sendMessage(TranslatableMessage.of("cleanlight.usage.debugblock.clear"));
+                    //sender.sendMessage(ChatColor.RED + "/cleanlight debugblock clear");
                 } else {
                     int x = ParseUtil.parseInt(args[1], 0);
                     int y = ParseUtil.parseInt(args[2], 0);
                     int z = ParseUtil.parseInt(args[3], 0);
                     LightingCube.DEBUG_BLOCK = new IntVector3(x, y, z);
-                    sender.sendMessage(ChatColor.GREEN + "Will show generated levels for block " +
-                            x + "/" + y + "/" + z);
+                    sender.sendMessage(String.format(TranslatableMessage.of("show.generated.levels"),
+                            x, y, z
+                            )
+                    );
+                    //sender.sendMessage(ChatColor.GREEN + "Will show generated levels for block " +
+                            // x + "/" + y + "/" + z);
                 }
                 return true;
             }
@@ -192,9 +209,11 @@ public class LightCleaner extends PluginBase {
                 Permission.ABORT.handle(sender);
                 if (LightingService.isProcessing()) {
                     LightingService.clearTasks();
-                    sender.sendMessage(ChatColor.GREEN + "All pending tasks cleared.");
+                    sender.sendMessage(TranslatableMessage.of("cleanlight.pending.tasks.cleared"));
+                    //sender.sendMessage(ChatColor.GREEN + "All pending tasks cleared.");
                 } else {
-                    sender.sendMessage(ChatColor.YELLOW + "No lighting was being processed; there was nothing to abort.");
+                    sender.sendMessage(TranslatableMessage.of("cleanlight.no.lighting.aborted"));
+                    //sender.sendMessage(ChatColor.YELLOW + "No lighting was being processed; there was nothing to abort.");
                 }
                 return true;
             }
@@ -202,9 +221,15 @@ public class LightCleaner extends PluginBase {
                 // cleanlight pause
                 Permission.PAUSE.handle(sender);
                 LightingService.setPaused(true);
-                sender.sendMessage(ChatColor.YELLOW + "Light cleaning " + ChatColor.RED + "paused");
+                sender.sendMessage(TranslatableMessage.of("cleanlight.lighting.paused"));
+                //sender.sendMessage(ChatColor.YELLOW + "Light cleaning " + ChatColor.RED + "paused");
                 if (LightingService.isProcessing()) {
-                    sender.sendMessage(ChatColor.RED.toString() + LightingService.getChunkFaults() + ChatColor.YELLOW + " chunks are pending");
+
+                    sender.sendMessage(String.format(TranslatableMessage.of("cleanlight.pending.chunks"),
+                            LightingService.getChunkFaults()
+                            )
+                    );
+                    //sender.sendMessage(ChatColor.RED.toString() + LightingService.getChunkFaults() + ChatColor.YELLOW + " chunks are pending");
                 }
                 return true;
             }
@@ -212,7 +237,8 @@ public class LightCleaner extends PluginBase {
                 // cleanlight resume
                 Permission.PAUSE.handle(sender);
                 LightingService.setPaused(false);
-                sender.sendMessage(ChatColor.YELLOW + "Light cleaning " + ChatColor.GREEN + "resumed");
+                sender.sendMessage(TranslatableMessage.of("cleanlight.lighting.resumed"));
+                //sender.sendMessage(ChatColor.YELLOW + "Light cleaning " + ChatColor.GREEN + "resumed");
                 if (LightingService.isProcessing()) {
                     sender.sendMessage(ChatColor.RED.toString() + LightingService.getChunkFaults() + ChatColor.YELLOW + " chunks will now be processed");
                 }
