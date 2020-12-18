@@ -51,6 +51,11 @@ public class LightCleaner extends PluginBase {
     }
 
     @Override
+    public void localization() {
+        this.loadLocales(Localization.class);
+    }
+
+    @Override
     public void permissions() {
         this.loadPermissions(Permission.class);
     }
@@ -262,9 +267,9 @@ public class LightCleaner extends PluginBase {
 
         } catch (NoPermissionException ex) {
             if (sender instanceof Player) {
-                sender.sendMessage(ChatColor.RED + "You don't have permission to use this!");
+                Localization.NO_PERMISSION.message(sender);
             } else {
-                sender.sendMessage("This command is only for players!");
+                Localization.PLAYERS_ONLY.message(sender);
             }
         }
         return true;
