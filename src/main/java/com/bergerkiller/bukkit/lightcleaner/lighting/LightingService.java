@@ -19,7 +19,9 @@ import com.bergerkiller.bukkit.lightcleaner.util.FlatRegionInfoMap;
 import com.bergerkiller.bukkit.lightcleaner.util.LightingUtil;
 
 import org.bukkit.*;
+import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 
 import java.io.DataInputStream;
@@ -122,6 +124,10 @@ public class LightingService extends AsyncTask {
      * @param player to add, null for console
      */
     public static void addRecipient(CommandSender sender) {
+        if (sender instanceof BlockCommandSender) {
+            return;
+        }
+
         synchronized (recipientsForDone) {
             recipientsForDone.add(new RecipientWhenDone(sender));
         }
@@ -675,6 +681,7 @@ public class LightingService extends AsyncTask {
         private boolean debugMakeCorrupted = false;
         private boolean loadedChunksOnly = false;
         private boolean forceSaving = false;
+        private boolean silent = false;
         private int radius = Bukkit.getServer().getViewDistance();
 
         public boolean getDebugMakeCorrupted() {
@@ -695,6 +702,16 @@ public class LightingService extends AsyncTask {
 
         public boolean isEntireWorld() {
             return this.chunks == null;
+        }
+
+        /**
+         * Whether to send messages to players invoking the command,
+         * or when the command completes
+         *
+         * @return True if silent
+         */
+        public boolean isSilent() {
+            return this.silent;
         }
 
         public World getWorld() {
@@ -751,6 +768,11 @@ public class LightingService extends AsyncTask {
 
         public ScheduleArguments setForceSaving(boolean forceSaving) {
             this.forceSaving = forceSaving;
+            return this;
+        }
+
+        public ScheduleArguments setSilent(boolean silent) {
+            this.silent = silent;
             return this;
         }
 
@@ -862,6 +884,7 @@ public class LightingService extends AsyncTask {
          * Parses the arguments specified in a command
          * 
          * @param sender
+         * @param args Input arguments
          * @return false if the input is incorrect and operations may not proceed
          * @throws NoPermissionException
          */
@@ -871,7 +894,9 @@ public class LightingService extends AsyncTask {
                 boolean entireWorld = false;
                 for (int i = 0; i < args.length; i++) {
                     String arg = args[i];
-                    if (arg.equalsIgnoreCase("dirty")) {
+                    if (arg.equalsIgnoreCase("silent")) {
+                        setSilent(true);
+                    } else if (arg.equalsIgnoreCase("dirty")) {
                         setDebugMakeCorrupted(true);
                     } else if (arg.equalsIgnoreCase("loaded")) {
                         setLoadedChunksOnly(true);
@@ -894,10 +919,10 @@ public class LightingService extends AsyncTask {
                     // Clean world permission
                     Permission.CLEAN_WORLD.handle(sender);
                 } else {
-                    // Check sender is a player
-                    if (!(sender instanceof Player)) {
-                        // Can't do this from console. TODO?
-                        sender.sendMessage("This command is only available to players");
+                    // Check sender has location info
+                    if (getLocationOfSender(sender) == null) {
+                        // Can't do this from console (command blocks work)
+                        sender.sendMessage("This command can not be done from the console");
                         return false;
                     }
 
@@ -905,7 +930,7 @@ public class LightingService extends AsyncTask {
                     // Players with the CLEAN_ANY permission can clean any radius
                     // Players with the CLEAN_VIEW permission can clean up to the view radius
                     // Players with the CLEAN_BY_RADIUS permission can clean up to [radius]
-                    if (!checkRadiusPermission(sender, this.getRadius())) {
+                    if (sender instanceof Player && !checkRadiusPermission(sender, this.getRadius())) {
                         return false;
                     }
                 }
@@ -918,8 +943,9 @@ public class LightingService extends AsyncTask {
                     }
 
                     if (this.getWorldName() == null) {
-                        if (sender instanceof Player) {
-                            this.setWorld(((Player) sender).getWorld());
+                        Location loc = getLocationOfSender(sender);
+                        if (loc != null) {
+                            this.setWorld(loc.getWorld());
                         } else {
                             sender.sendMessage("As a console you have to specify the world to fix!");
                             return false;
@@ -928,8 +954,13 @@ public class LightingService extends AsyncTask {
 
                     this.setEntireWorld();
                 } else {
-                    this.setChunksAround(((Player) sender).getLocation(), this.getRadius());
+                    this.setChunksAround(getLocationOfSender(sender), this.getRadius());
                 }
+            }
+
+            // No messages when silent
+            if (this.silent) {
+                return true;
             }
 
             // Response message
@@ -978,6 +1009,16 @@ public class LightingService extends AsyncTask {
          */
         public static ScheduleArguments create() {
             return new ScheduleArguments();
+        }
+
+        private static Location getLocationOfSender(CommandSender sender) {
+            if (sender instanceof BlockCommandSender) {
+                return ((BlockCommandSender) sender).getBlock().getLocation();
+            } else if (sender instanceof Entity) {
+                return ((Entity) sender).getLocation();
+            } else {
+                return null;
+            }
         }
     }
 

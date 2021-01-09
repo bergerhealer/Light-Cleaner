@@ -8,6 +8,7 @@ public class Permission extends PermissionEnum {
     public static final Permission CLEAN_ANY_RADIUS = new Permission("lightcleaner.clean.any", PermissionDefault.OP, "Allows a player to fix lighting issues in chunks around the player with any radius");
     public static final Permission CLEAN_BY_RADIUS = new Permission("lightcleaner.clean.radius", PermissionDefault.OP, "Allows a player to only fix a specific radius of chunks (example perm: lightcleaner.clean.radius.4)", 1);
     public static final Permission CLEAN_WORLD = new Permission("lightcleaner.clean.world", PermissionDefault.OP, "Allows a player to fix lighting issues in all the chunks of an entire world");
+    public static final Permission CLEAN_AT = new Permission( "lightcleaner.clean.at", PermissionDefault.OP, "Allows a player to specify coordinates to clean");
     public static final Permission STATUS = new Permission("lightcleaner.status", PermissionDefault.OP, "Allows a player to check the status of ongoing lighting operations");
     public static final Permission ABORT = new Permission("lightcleaner.abort", PermissionDefault.OP, "Allows a player to abort all current lighting operations");
     public static final Permission PAUSE = new Permission("lightcleaner.pause", PermissionDefault.OP, "Allows a player to pause and resume lighting operations");

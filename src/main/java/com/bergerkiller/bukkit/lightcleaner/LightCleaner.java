@@ -5,9 +5,13 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.logging.Level;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
@@ -17,6 +21,7 @@ import com.bergerkiller.bukkit.common.Task;
 import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
+import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.ParseUtil;
 import com.bergerkiller.bukkit.lightcleaner.impl.Handler;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingCube;
@@ -255,6 +260,80 @@ public class LightCleaner extends PluginBase {
                 } else {
                     sender.sendMessage(ChatColor.GREEN + "No lighting is being processed at this time.");
                 }
+                return true;
+            }
+            if (subCmd.equalsIgnoreCase("at")) {
+                // cleanlight at <x> <z> <radius> [world_name]
+                Permission.CLEAN_AT.handle(sender);
+
+                if (args.length < 4) {
+                    sender.sendMessage(ChatColor.RED + "Invalid syntax!");
+                    sender.sendMessage(ChatColor.YELLOW + "Syntax: /cleanlight at <x> <z> <radius> [world_name]");
+                    sender.sendMessage(ChatColor.YELLOW + "Note: x, z and radius are chunk coordinates!");
+                    return true;
+                }
+
+                // Relative to sender when ~ is used (or no world is specified)
+                Location senderLocation;
+                if (sender instanceof BlockCommandSender) {
+                    senderLocation = ((BlockCommandSender) sender).getBlock().getLocation();
+                } else if (sender instanceof Entity) {
+                    senderLocation = ((Entity) sender).getLocation();
+                } else {
+                    senderLocation = new Location(Bukkit.getWorlds().get(0), 0, 0, 0);
+                }
+
+                int x, z, radius;
+                World world;
+
+                // Ew, parsing!
+                if (args[1].startsWith("~")) {
+                    if ((x = ParseUtil.parseInt(args[1].substring(1), Integer.MAX_VALUE)) == Integer.MAX_VALUE) {
+                        sender.sendMessage(ChatColor.RED + "Incorrect syntax for chunk x-coordinate: " + args[1]);
+                        return true;
+                    }
+                    x += MathUtil.toChunk(senderLocation.getBlockX());
+                } else {
+                    if ((x = ParseUtil.parseInt(args[1], Integer.MAX_VALUE)) == Integer.MAX_VALUE) {
+                        sender.sendMessage(ChatColor.RED + "Incorrect syntax for chunk x-coordinate: " + args[1]);
+                        return true;
+                    }
+                }
+                if (args[2].startsWith("~")) {
+                    if ((z = ParseUtil.parseInt(args[2].substring(1), Integer.MAX_VALUE)) == Integer.MAX_VALUE) {
+                        sender.sendMessage(ChatColor.RED + "Incorrect syntax for chunk z-coordinate: " + args[2]);
+                        return true;
+                    }
+                    z += MathUtil.toChunk(senderLocation.getBlockZ());
+                } else {
+                    if ((z = ParseUtil.parseInt(args[2], Integer.MAX_VALUE)) == Integer.MAX_VALUE) {
+                        sender.sendMessage(ChatColor.RED + "Incorrect syntax for chunk z-coordinate: " + args[2]);
+                        return true;
+                    }
+                }
+                if ((radius = ParseUtil.parseInt(args[3], Integer.MAX_VALUE)) == Integer.MAX_VALUE) {
+                    sender.sendMessage(ChatColor.RED + "Incorrect syntax for radius: " + args[3]);
+                    return true;
+                }
+                if (args.length >= 5) {
+                    world = Bukkit.getWorld(args[4]);
+                    if (world == null) {
+                        sender.sendMessage(ChatColor.RED + "World not found: " + args[4]);
+                        return true;
+                    }
+                } else {
+                    world = senderLocation.getWorld();
+                }
+
+                // Display confirm message
+                sender.sendMessage(ChatColor.GREEN + "Cleaning light near chunk [x=" + x + ", z=" + z + "] on world " + world.getName());
+
+                // Store as schedule arguments and try scheduling
+                LightingService.ScheduleArguments scheduleArgs = new LightingService.ScheduleArguments();
+                scheduleArgs.setWorld(world);
+                scheduleArgs.setChunksAround(x, z, radius);
+                LightingService.schedule(scheduleArgs);
+                LightingService.addRecipient(sender);
                 return true;
             }
 
