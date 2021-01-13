@@ -2,12 +2,14 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import java.util.concurrent.CompletableFuture;
 
+import com.bergerkiller.bukkit.common.Timings;
 import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.collections.BlockFaceSet;
 import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
+import com.bergerkiller.bukkit.lightcleaner.LCTimings;
 import com.bergerkiller.bukkit.lightcleaner.util.BlockFaceSetSection;
 import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
 
@@ -30,7 +32,7 @@ public class LightingCube {
     private static final NibbleArrayHandle ALL_ZERO_NIBBLE_ARRAY = NibbleArrayHandle.createNew();
     private static final BlockFaceSetSection ALL_TRANSPARENT_OPAQUE_FACES = new BlockFaceSetSection();
 
-    public LightingCube(Data currentData) {
+    private LightingCube(Data currentData) {
         this.owner = currentData.owner;
         this.skyLight = currentData.currentSkyLight;
         this.blockLight = currentData.currentBlockLight;
@@ -330,7 +332,7 @@ public class LightingCube {
         public final NibbleArrayHandle currentSkyLight;
         public final NibbleArrayHandle currentBlockLight;
 
-        public Data(LightingChunk owner, int cy, ChunkSection chunkSection) {
+        private Data(LightingChunk owner, int cy, ChunkSection chunkSection) {
             this.owner = owner;
             this.cy = cy;
             this.chunkSection = chunkSection;
@@ -369,6 +371,16 @@ public class LightingCube {
                 } else {
                     this.currentSkyLight = null;
                 }
+            }
+        }
+
+        public LightingCube build() {
+            return new LightingCube(this);
+        }
+
+        public static Data create(LightingChunk owner, int cy, ChunkSection chunkSection) {
+            try (Timings t = LCTimings.FILL_CUBE_LIGHT.start()) {
+                return new Data(owner, cy, chunkSection);
             }
         }
     }

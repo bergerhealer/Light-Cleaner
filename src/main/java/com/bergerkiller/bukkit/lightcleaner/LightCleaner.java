@@ -69,7 +69,7 @@ public class LightCleaner extends PluginBase {
     public void enable() {
         plugin = this;
 
-        register(new NLLListener());
+        register(new LCListener());
 
         FileConfiguration config = new FileConfiguration(this);
         config.load();

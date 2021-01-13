@@ -1,11 +1,13 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
+import com.bergerkiller.bukkit.common.Timings;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.collections.BlockFaceSet;
 import com.bergerkiller.bukkit.common.utils.ChunkUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.HeightMap;
 import com.bergerkiller.bukkit.common.wrappers.IntHashMap;
+import com.bergerkiller.bukkit.lightcleaner.LCTimings;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.bukkit.lightcleaner.util.DelayClosedForcedChunk;
 import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
@@ -134,7 +136,7 @@ public class LightingChunk {
 
         int minSectionCy = 0;
         int maxSectionCy = 0;
-        {
+        try (Timings t = LCTimings.FILL_CHUNK_DATA.start()) {
             // First create a list of ChunkSection objects storing the data
             // We must do this sequentially, because asynchronous access is not permitted
             List<LightingCube.Data> chunkSectionList = IntStream.of(region_y_coordinates)
@@ -142,12 +144,15 @@ public class LightingChunk {
                     .flatMap(base_cy -> IntStream.range(base_cy, base_cy + WorldUtil.CHUNKS_PER_REGION_AXIS))
                     .mapToObj(cy -> WorldUtil.getSection(chunk, cy))
                     .filter(section -> section != null)
-                    .map(section -> new LightingCube.Data(LightingChunk.this, section.getY(), section))
+                    .map(section -> LightingCube.Data.create(LightingChunk.this, section.getY(), section))
                     .collect(Collectors.toList());
 
             // Then process all the gathered chunk sections into a LightingChunkSection in parallel
-            List<LightingCube> lightingChunkSectionList = chunkSectionList.stream()
-                    .parallel().map(LightingCube::new).collect(Collectors.toList());
+            List<LightingCube> lightingChunkSectionList;
+            try (Timings t2 = LCTimings.FILL_CUBE_BLOCKDATA.start()) {
+                lightingChunkSectionList = chunkSectionList.stream()
+                        .parallel().map(LightingCube.Data::build).collect(Collectors.toList());
+            }
 
             // Calculate min/max chunk section coordinates
             // Make use of the fact that they are pre-sorted by y-coordinate
@@ -173,20 +178,22 @@ public class LightingChunk {
         if (this.sections.size() >= 2 && (this.maxY - this.minY) < 4096) {
             for (int cy = minSectionCy+1; cy < maxSectionCy; cy++) {
                 if (!this.sections.contains(cy)) {
-                    this.sections.put(cy, new LightingCube(new LightingCube.Data(this, cy, null)));
+                    this.sections.put(cy, LightingCube.Data.create(this, cy, null).build());
                 }
             }
         }
 
         // Initialize and then load sky light heightmap information
         if (this.hasSkyLight) {
-            HeightMap heightmap = ChunkUtil.getLightHeightMap(chunk, true);
-            int max_slice_y = 0;
-            for (int x = 0; x < 16; ++x) {
-                for (int z = 0; z < 16; ++z) {
-                    int y = Math.max(this.minY, heightmap.getHeight(x, z));
-                    this.heightmap[this.getHeightKey(x, z)] = y;
-                    max_slice_y = Math.max(y, max_slice_y);
+            try (Timings t = LCTimings.INIT_HEIGHT_MAP.start()) {
+                HeightMap heightmap = ChunkUtil.getLightHeightMap(chunk, true);
+                int max_slice_y = 0;
+                for (int x = 0; x < 16; ++x) {
+                    for (int z = 0; z < 16; ++z) {
+                        int y = Math.max(this.minY, heightmap.getHeight(x, z));
+                        this.heightmap[this.getHeightKey(x, z)] = y;
+                        max_slice_y = Math.max(y, max_slice_y);
+                    }
                 }
             }
         } else {
