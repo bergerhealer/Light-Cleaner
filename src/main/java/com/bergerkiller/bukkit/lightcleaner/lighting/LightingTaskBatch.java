@@ -224,7 +224,7 @@ public class LightingTaskBatch implements LightingTask {
         while (!aborted) {
             try {
                 future.get(200, TimeUnit.MILLISECONDS);
-                return true;
+                return !aborted;
             } catch (InterruptedException | TimeoutException e1) {
                 // Ignore
             } catch (ExecutionException ex) {
@@ -380,8 +380,10 @@ public class LightingTaskBatch implements LightingTask {
         // Schedule, on the main thread, to fill all the loaded chunks with data
         CompletableFuture<Void> chunkFillFuture = CompletableFuture.runAsync(() -> {
             synchronized (this.chunks_lock) {
-                for (LightingChunk lc : chunks) {
-                    lc.fill(lc.forcedChunk.getChunk(), region_y_coords);
+                if (!this.aborted) {
+                    for (LightingChunk lc : chunks) {
+                        lc.fill(lc.forcedChunk.getChunk(), region_y_coords);
+                    }
                 }
             }
         }, CommonUtil.getPluginExecutor(LightCleaner.plugin));
