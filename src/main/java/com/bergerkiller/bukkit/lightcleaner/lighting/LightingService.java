@@ -577,14 +577,13 @@ public class LightingService extends AsyncTask {
         if (currentTask == null) {
             // No more tasks, end this thread
             // Messages
-            final String message = ChatColor.GREEN + "All lighting operations are completed.";
             synchronized (recipientsForDone) {
                 for (RecipientWhenDone recipient : recipientsForDone) {
                     CommandSender recip = recipient.player_name == null ?
                             Bukkit.getConsoleSender() : Bukkit.getPlayer(recipient.player_name);
                     if (recip != null) {
                         String timeStr = LightingUtil.formatDuration(System.currentTimeMillis() - recipient.timeStarted);
-                        recip.sendMessage(message + ChatColor.WHITE + " (Took " + timeStr + ")");
+                        Localization.COMPLETED.message(recip, timeStr);
                     }
                 }
                 recipientsForDone.clear();
