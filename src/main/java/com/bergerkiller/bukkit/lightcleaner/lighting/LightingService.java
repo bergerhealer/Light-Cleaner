@@ -13,6 +13,7 @@ import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
+import com.bergerkiller.bukkit.lightcleaner.Localization;
 import com.bergerkiller.bukkit.lightcleaner.Permission;
 import com.bergerkiller.bukkit.lightcleaner.util.FlatRegionInfo;
 import com.bergerkiller.bukkit.lightcleaner.util.FlatRegionInfoMap;
@@ -984,19 +985,19 @@ public class LightingService extends AsyncTask {
             } else {
                 // Radius logic
                 int n = (getRadius() * 2 + 1);
-                String message = ChatColor.GREEN + "A " + n + " X " + n + " ";
+                String part = n + " X " + n;
                 if (this.getLoadedChunksOnly()) {
-                    message += ChatColor.YELLOW + "loaded " + ChatColor.GREEN;
-                }
-                if (this.getDebugMakeCorrupted()) {
-                    message += "chunk area around you is currently being corrupted, introducing lighting issues...";
-                } else {
-                    message += "chunk area around you is currently being fixed from lighting issues...";
+                    part += " [loaded]";
                 }
                 if (this.getForceSaving()) {
-                    message += " (Forced Saving)";
+                    part += " [forced]";
                 }
-                sender.sendMessage(message);
+
+                if (this.getDebugMakeCorrupted()) {
+                    Localization.AREA_CORRUPT.message(sender, part);
+                } else {
+                    Localization.AREA_FIX.message(sender, part);
+                }
             }
 
             return true;
