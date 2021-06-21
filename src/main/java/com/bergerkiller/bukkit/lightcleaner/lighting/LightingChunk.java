@@ -10,7 +10,7 @@ import com.bergerkiller.bukkit.common.wrappers.IntHashMap;
 import com.bergerkiller.bukkit.lightcleaner.LCTimings;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.bukkit.lightcleaner.util.DelayClosedForcedChunk;
-import com.bergerkiller.generated.net.minecraft.server.ChunkHandle;
+import com.bergerkiller.generated.net.minecraft.world.level.chunk.ChunkHandle;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;

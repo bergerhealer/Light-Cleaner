@@ -11,7 +11,7 @@ import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.lightcleaner.LCTimings;
 import com.bergerkiller.bukkit.lightcleaner.util.BlockFaceSetSection;
-import com.bergerkiller.generated.net.minecraft.server.NibbleArrayHandle;
+import com.bergerkiller.generated.net.minecraft.world.level.chunk.NibbleArrayHandle;
 
 /**
  * A single 16x16x16 cube of stored block information
