@@ -11,6 +11,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.build.number>NO-CI</project.build.number>
         <project.serverversion>1.16.1-R0.1</project.serverversion>
         <project.bkcversion>1.17.1-v1-SNAPSHOT</project.bkcversion>
         <project.cibuild/>
@@ -25,7 +26,7 @@
                 </property>
             </activation>
             <properties>
-                <project.cibuild>${env.BUILD_NUMBER}</project.cibuild>
+                <project.build.number>${env.BUILD_NUMBER}</project.build.number>
             </properties>
         </profile>
     </profiles>
@@ -81,6 +82,8 @@
 
     <!-- Build -->
     <build>
+        <!-- Export artifact with name that includes the build number -->
+        <finalName>${project.name}-${project.version}-${project.build.number}</finalName>
         <defaultGoal>clean install</defaultGoal>
 
         <!-- Resources (the filtering allows us to use project properties in plugin.yml) -->
@@ -112,6 +115,29 @@
                 <artifactId>maven-source-plugin</artifactId>
                 <version>3.0.1</version>
             </plugin>
+
+            <!-- Copy the produced target to the static directory with just a base name -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.8</version>
+                <executions>
+                    <!-- Prepare the version-less output jar -->
+                    <execution>
+                        <id>version-less-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <copy file="target/${project.name}-${project.version}-${project.build.number}.jar" tofile="target/static/${project.name}.jar"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- Compiling the source code -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
