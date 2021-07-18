@@ -1,13 +1,18 @@
 name: ${project.name}
-main: com.bergerkiller.bukkit.lightcleaner.LightCleaner
-api-version: 1.13
+dev-url: ${project.url}
 version: ${project.version}
 build: ${project.build.number}
-authors: [bergerkiller]
-depend: [BKCommonLib]
-softdepend: [WorldEdit]
 description: Cleans up bugged lighting in chunks or entire worlds
-dev-url: ${project.url}
+authors: [bergerkiller]
+softdepend: [BKCommonLib, WorldEdit]
+api-version: 1.13
+
+main: com.bergerkiller.bukkit.lightcleaner.Preloader
+preloader:
+    main: com.bergerkiller.bukkit.lightcleaner.LightCleaner
+    depend:
+        BKCommonLib: https://www.spigotmc.org/resources/bkcommonlib.39590/
+
 commands:
     cleanlight:
         description: Cleans up bugged lighting in chunks or entire worlds
