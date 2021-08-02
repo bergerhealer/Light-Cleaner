@@ -470,7 +470,7 @@ public class LightingTaskBatch implements LightingTask {
             Chunk bchunk = lc.forcedChunk.getChunk();
 
             // Save to chunk
-            applyFutures[i] = lc.saveToChunk(bchunk, options.getForceSaving()).whenComplete((changed, t) -> {
+            applyFutures[i] = lc.saveToChunk(bchunk, options.getForceSaving()).whenCompleteAsync((changed, t) -> {
                 if (t != null) {
                     t.printStackTrace();
                 } else if (changed.booleanValue()) {
@@ -479,7 +479,7 @@ public class LightingTaskBatch implements LightingTask {
 
                 // Closes our forced chunk, may cause the chunk to now unload
                 lc.forcedChunk.close();
-            });
+            }, CommonUtil.getPluginExecutor(LightCleaner.plugin));
         }
         return CompletableFuture.allOf(applyFutures);
     }
