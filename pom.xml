@@ -4,7 +4,7 @@
 
     <groupId>com.bergerkiller.bukkit</groupId>
     <artifactId>LightCleaner</artifactId>
-    <version>1.17.1-v1-SNAPSHOT</version>
+    <version>1.17.1-v1</version>
     <packaging>jar</packaging>
     <name>LightCleaner</name>
     <url>https://github.com/bergerhealer/light-cleaner/</url>
