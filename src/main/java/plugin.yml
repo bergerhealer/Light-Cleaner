@@ -10,6 +10,7 @@ api-version: 1.13
 main: com.bergerkiller.bukkit.lightcleaner.Preloader
 preloader:
     main: com.bergerkiller.bukkit.lightcleaner.LightCleaner
+    hastebinServer: https://paste.traincarts.net
     depend:
         BKCommonLib: https://www.spigotmc.org/resources/bkcommonlib.39590/
 
