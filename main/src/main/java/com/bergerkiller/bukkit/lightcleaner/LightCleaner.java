@@ -2,6 +2,7 @@ package com.bergerkiller.bukkit.lightcleaner;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 
@@ -25,8 +26,12 @@ import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.ParseUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
+import com.bergerkiller.bukkit.lightcleaner.handler.FastAsyncWorldEditHandlerV1;
+import com.bergerkiller.bukkit.lightcleaner.handler.FastAsyncWorldEditHandlerV2;
 import com.bergerkiller.bukkit.lightcleaner.handler.Handler;
 import com.bergerkiller.bukkit.lightcleaner.handler.HandlerOps;
+import com.bergerkiller.bukkit.lightcleaner.handler.WorldEditHandlerV1;
+import com.bergerkiller.bukkit.lightcleaner.handler.WorldEditHandlerV2;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingAutoClean;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingCube;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
@@ -41,8 +46,20 @@ public class LightCleaner extends PluginBase {
     public static boolean skipWorldEdge = true;
     public static final int WORLD_EDGE = 2;
     public static Set<String> unsavedWorldNames = new HashSet<String>();
-    private boolean worldEditHandlerEnabled = false;
-    private Handler worldEditHandler = null;
+    private boolean autoCleanHandlerEnabled = false;
+    private Handler autoCleanHandler = null;
+    private Handler.HandlerInstance autoCleanHandlerInstance = null;
+
+    /**
+     * All auto-cleaning handlers supported (shipped) with LightCleaner.
+     * These are used in order of priority, top first.
+     */
+    private static final List<Handler> ALL_AUTO_CLEAN_HANDLERS = Arrays.asList(
+            new FastAsyncWorldEditHandlerV2(),
+            new FastAsyncWorldEditHandlerV1(),
+            new WorldEditHandlerV2(),
+            new WorldEditHandlerV1()
+    );
 
     /**
      * Used by auto-cleaning handlers
@@ -129,7 +146,7 @@ public class LightCleaner extends PluginBase {
 
         config.setHeader("autoCleanWorldEditEnabled", "\nSets whether lighting is cleaned up when players perform WorldEdit operations");
         config.addHeader("autoCleanWorldEditEnabled", "This is primarily useful for FastAsyncWorldEdit");
-        worldEditHandlerEnabled = config.get("autoCleanWorldEditEnabled", false);
+        autoCleanHandlerEnabled = config.get("autoCleanWorldEditEnabled", false);
 
         config.setHeader("asyncLoadConcurrency", "\nHow many chunks are asynchronously loaded at the same time");
         config.addHeader("asyncLoadConcurrency", "Setting this value too high may overflow the internal queues. Too low and it will idle too much.");
@@ -168,36 +185,54 @@ public class LightCleaner extends PluginBase {
 
     @Override
     public void updateDependency(Plugin plugin, String pluginName, boolean enabled) {
-        if (worldEditHandlerEnabled && providesWorldEdit(plugin)) {
-            if (enabled && worldEditHandler == null) {
-                try {
-                    Class.forName("com.boydti.fawe.beta.IBatchProcessor");
-                    worldEditHandler = new com.bergerkiller.bukkit.lightcleaner.handler.FastAsyncWorldEditHandlerV1();
-                } catch (ClassNotFoundException ex) {
-                    worldEditHandler = new com.bergerkiller.bukkit.lightcleaner.handler.WorldEditHandler();
-                }
-                worldEditHandler.enable(handlerOps);
-            } else if (!enabled && worldEditHandler != null) {
-                worldEditHandler.disable(handlerOps);
-                worldEditHandler = null;
-                log(Level.INFO, "WorldEdit was disabled, support for automatic light cleaning turned off");
-            }
+        if (autoCleanHandler != null && !enabled && !autoCleanHandler.isSupported()) {
+            // Disable current handler, no longer supported
+            disableCurrentAutoCleanHandler();
+
+            // See if there's a fallback
+            detectAutoCleanHandlers();
+        } else if (enabled) {
+            // See if a handler enables itself
+            detectAutoCleanHandlers();
         }
     }
 
-    private static boolean providesWorldEdit(Plugin plugin) {
-        if (plugin.getName().equalsIgnoreCase("worldedit")) {
-            return true;
+    private void disableCurrentAutoCleanHandler() {
+        if (autoCleanHandlerInstance == null) {
+            return;
         }
+
         try {
-            for (String provide : plugin.getDescription().getProvides()) {
-                if ("worldedit".equalsIgnoreCase(provide)) {
-                    return true;
-                }
-            }
-            return false;
+            autoCleanHandlerInstance.disable();
+            log(Level.INFO, autoCleanHandler.getDisableMessage());
         } catch (Throwable t) {
-            return false;
+            getLogger().log(Level.SEVERE, "Failed to disable " + autoCleanHandler.getClass().getSimpleName(), t);
+        }
+        autoCleanHandler = null;
+        autoCleanHandlerInstance = null;
+    }
+
+    private void detectAutoCleanHandlers() {
+        // Only when enabled in the configuration
+        if (!autoCleanHandlerEnabled) {
+            return;
+        }
+
+        for (Handler handler : ALL_AUTO_CLEAN_HANDLERS) {
+            if (handler.isSupported()) {
+                if (autoCleanHandler == null || autoCleanHandler != handler) {
+                    disableCurrentAutoCleanHandler();
+
+                    try {
+                        autoCleanHandlerInstance = handler.enable(handlerOps);
+                        autoCleanHandler = handler;
+                        log(Level.INFO, handler.getEnableMessage());
+                    } catch (Throwable t) {
+                        getLogger().log(Level.SEVERE, "Failed to enable " + handler.getClass().getSimpleName(), t);
+                    }
+                }
+                break;
+            }
         }
     }
 

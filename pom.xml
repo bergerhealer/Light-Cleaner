@@ -69,8 +69,10 @@
 
     <modules>
         <module>handler-base</module>
-        <module>handler-worldedit</module>
+        <module>handler-worldedit-v1</module>
+        <module>handler-worldedit-v2</module>
         <module>handler-fawe-v1</module>
+        <module>handler-fawe-v2</module>
         <module>main</module>
     </modules>
 

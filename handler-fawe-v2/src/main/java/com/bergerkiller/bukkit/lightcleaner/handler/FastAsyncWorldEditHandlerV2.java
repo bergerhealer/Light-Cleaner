@@ -3,10 +3,10 @@ package com.bergerkiller.bukkit.lightcleaner.handler;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
-import com.boydti.fawe.beta.IBatchProcessor;
-import com.boydti.fawe.beta.IChunk;
-import com.boydti.fawe.beta.IChunkGet;
-import com.boydti.fawe.beta.IChunkSet;
+import com.fastasyncworldedit.core.queue.IBatchProcessor;
+import com.fastasyncworldedit.core.queue.IChunk;
+import com.fastasyncworldedit.core.queue.IChunkGet;
+import com.fastasyncworldedit.core.queue.IChunkSet;
 import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
@@ -19,7 +19,7 @@ import com.sk89q.worldedit.util.eventbus.Subscribe;
  * Uses the experimental (beta) API of FastAsyncWorldEdit to
  * detect chunks that change.
  */
-public final class FastAsyncWorldEditHandlerV1 implements Handler {
+public final class FastAsyncWorldEditHandlerV2 implements Handler {
 
     @Override
     public boolean isSupported() {
@@ -30,8 +30,8 @@ public final class FastAsyncWorldEditHandlerV1 implements Handler {
 
         // These classes must exist
         try {
-            Class.forName("com.boydti.fawe.beta.IBatchProcessor");
-            Class.forName("com.boydti.fawe.beta.IChunk");
+            Class.forName("com.fastasyncworldedit.core.queue.IBatchProcessor");
+            Class.forName("com.fastasyncworldedit.core.queue.IChunk");
         } catch (ClassNotFoundException ex) {
             return false;
         }
@@ -41,7 +41,7 @@ public final class FastAsyncWorldEditHandlerV1 implements Handler {
 
     @Override
     public String getEnableMessage() {
-        return "Added support for automatic light cleaning when FastAsyncWorldEdit (<= v1.16) operations are performed!";
+        return "Added support for automatic light cleaning when FastAsyncWorldEdit (>= v1.17) operations are performed!";
     }
 
     @Override
@@ -84,11 +84,7 @@ public final class FastAsyncWorldEditHandlerV1 implements Handler {
                         return chunkSet;
                     }
 
-                    /**
-                     * Was added for a certain version, is probably never called, but we do want to
-                     * handle it being called gracefully.
-                     */
-                    @SuppressWarnings("unused")
+                    @Override
                     public Future<IChunkSet> postProcessSet(IChunk chunk, IChunkGet get, IChunkSet set) {
                         return CompletableFuture.completedFuture(set);
                     }

@@ -8,14 +8,14 @@
         <version>${revision}</version>
     </parent>
 
-    <artifactId>LightCleaner-handler-fawe-v1</artifactId>
+    <artifactId>LightCleaner-handler-worldedit-v2</artifactId>
     <packaging>jar</packaging>
 
     <repositories>
-        <!-- For FAWE -->
+        <!-- For WorldEdit -->
         <repository>
-            <id>IntellectualSites</id>
-            <url>https://mvn.intellectualsites.com/content/repositories/releases/</url>
+          <id>enginehub-repo</id>
+          <url>https://maven.enginehub.org/repo/</url>
         </repository>
     </repositories>
 
@@ -27,11 +27,11 @@
             <version>${revision}</version>
         </dependency>
 
-        <!-- FAWE -->
+        <!-- WorldEdit -->
         <dependency>
-            <groupId>com.intellectualsites.fawe</groupId>
-            <artifactId>FAWE-Bukkit</artifactId>
-            <version>1.0.0</version>
+            <groupId>com.sk89q.worldedit</groupId>
+            <artifactId>worldedit-bukkit</artifactId>
+            <version>7.2.0</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

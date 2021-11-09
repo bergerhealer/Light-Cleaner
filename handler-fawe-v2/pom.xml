@@ -8,7 +8,7 @@
         <version>${revision}</version>
     </parent>
 
-    <artifactId>LightCleaner-handler-fawe-v1</artifactId>
+    <artifactId>LightCleaner-handler-fawe-v2</artifactId>
     <packaging>jar</packaging>
 
     <repositories>
@@ -16,6 +16,11 @@
         <repository>
             <id>IntellectualSites</id>
             <url>https://mvn.intellectualsites.com/content/repositories/releases/</url>
+        </repository>
+        <!-- FAWE requires PaperLib -->
+        <repository>
+            <id>PaperMC</id>
+            <url>https://papermc.io/repo/repository/maven-public/</url>
         </repository>
     </repositories>
 
@@ -29,9 +34,9 @@
 
         <!-- FAWE -->
         <dependency>
-            <groupId>com.intellectualsites.fawe</groupId>
-            <artifactId>FAWE-Bukkit</artifactId>
-            <version>1.0.0</version>
+            <groupId>com.fastasyncworldedit</groupId>
+            <artifactId>FastAsyncWorldEdit-Bukkit</artifactId>
+            <version>1.17-390</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
