@@ -1,4 +1,4 @@
-package com.bergerkiller.bukkit.lightcleaner.impl;
+package com.bergerkiller.bukkit.lightcleaner.handler;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -7,9 +7,6 @@ import com.bergerkiller.bukkit.common.Task;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet.LongIterator;
-import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
-import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
-import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
 import com.bergerkiller.mountiplex.reflection.ClassHook;
 import com.bergerkiller.mountiplex.reflection.util.FastMethod;
 import com.sk89q.worldedit.EditSession;
@@ -22,19 +19,21 @@ import com.sk89q.worldedit.util.eventbus.Subscribe;
 
 public class WorldEditHandler implements Handler {
     private final EventBus eventBus;
+    private HandlerOps ops;
 
     public WorldEditHandler() {
         this.eventBus = WorldEdit.getInstance().getEventBus();
     }
 
     @Override
-    public void enable(LightCleaner plugin) {
+    public void enable(HandlerOps ops) {
+        this.ops = ops;
         eventBus.register(this);
-        plugin.log(Level.INFO, "Added support for automatic light cleaning when WorldEdit operations are performed!");
+        ops.getPlugin().getLogger().log(Level.INFO, "Added support for automatic light cleaning when WorldEdit operations are performed!");
     }
 
     @Override
-    public void disable(LightCleaner plugin) {
+    public void disable(HandlerOps ops) {
         eventBus.unregister(this);
     }
 
@@ -53,7 +52,7 @@ public class WorldEditHandler implements Handler {
     public void onEditSession(EditSessionEvent event) {
         if (event.getStage() == EditSession.Stage.BEFORE_CHANGE) {
             org.bukkit.World world = adaptWorldMethod.invoke(null, event.getWorld());
-            event.setExtent(LightCleanerAdapterHook.create(event.getExtent(), world));
+            event.setExtent(LightCleanerAdapterHook.create(event.getExtent(), ops, world));
         }
     }
 
@@ -73,18 +72,20 @@ public class WorldEditHandler implements Handler {
 
     // Main adapter, supports latest worldedit version
     public static class LightCleanerAdapter extends AbstractDelegateExtent {
+        private final HandlerOps _ops;
         private final org.bukkit.World _world;
         private final LongHashSet _chunks = new LongHashSet();
         private final Task _commitEarlyTask;
         private final Task _commitLateTask;
         private final AtomicInteger _ticksOfNoChanges = new AtomicInteger();
 
-        public LightCleanerAdapter(Extent extent, org.bukkit.World world) {
+        public LightCleanerAdapter(Extent extent, HandlerOps ops, org.bukkit.World world) {
             super(extent);
+            this._ops = ops;
             this._world = world;
 
             // This task runs every tick until 4 ticks go by with no changes
-            this._commitEarlyTask = new Task(LightCleaner.plugin) {
+            this._commitEarlyTask = new Task(_ops.getPlugin()) {
                 @Override
                 public void run() {
                     if (_ticksOfNoChanges.incrementAndGet() >= 5) {
@@ -94,7 +95,7 @@ public class WorldEditHandler implements Handler {
             };
 
             // This task runs guaranteed every 100 ticks
-            this._commitLateTask = new Task(LightCleaner.plugin) {
+            this._commitLateTask = new Task(_ops.getPlugin()) {
                 @Override
                 public void run() {
                     scheduleCleanup();
@@ -121,9 +122,7 @@ public class WorldEditHandler implements Handler {
             _chunks.clear();
 
             // Schedule them all
-            LightingService.schedule(ScheduleArguments.create()
-                    .setWorld(_world)
-                    .setChunks(chunksWithNeighbours));
+            _ops.scheduleMany(_world, chunksWithNeighbours);
         }
 
         public synchronized void register(int blockX, int blockZ) {
@@ -148,10 +147,10 @@ public class WorldEditHandler implements Handler {
         private final FastMethod<Integer> blockvector_getBlockY = new FastMethod<Integer>();
         private final FastMethod<Integer> blockvector_getBlockZ = new FastMethod<Integer>();
 
-        public static LightCleanerAdapter create(Extent extent, org.bukkit.World world) {
+        public static LightCleanerAdapter create(Extent extent, HandlerOps ops, org.bukkit.World world) {
             return INSTANCE.constructInstance(LightCleanerAdapter.class,
-                    new Class<?>[] { Extent.class, org.bukkit.World.class },
-                    new Object[] { extent, world });
+                    new Class<?>[] { Extent.class, HandlerOps.class, org.bukkit.World.class },
+                    new Object[] { extent, ops, world });
         }
 
         public LightCleanerAdapterHook() {

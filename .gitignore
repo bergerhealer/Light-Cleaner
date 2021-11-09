@@ -14,6 +14,7 @@ build.xml
 # maven
 target/
 dependency-reduced-pom.xml
+.flattened-pom.xml
 
 # vim
 .*.sw[a-p]

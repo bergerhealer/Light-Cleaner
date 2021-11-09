@@ -14,6 +14,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import com.bergerkiller.bukkit.common.Common;
 import com.bergerkiller.bukkit.common.PluginBase;
@@ -23,9 +24,13 @@ import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.ParseUtil;
-import com.bergerkiller.bukkit.lightcleaner.impl.Handler;
+import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
+import com.bergerkiller.bukkit.lightcleaner.handler.Handler;
+import com.bergerkiller.bukkit.lightcleaner.handler.HandlerOps;
+import com.bergerkiller.bukkit.lightcleaner.lighting.LightingAutoClean;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingCube;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
+import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
 import com.bergerkiller.bukkit.lightcleaner.util.DelayClosedForcedChunk;
 
 public class LightCleaner extends PluginBase {
@@ -38,6 +43,28 @@ public class LightCleaner extends PluginBase {
     public static Set<String> unsavedWorldNames = new HashSet<String>();
     private boolean worldEditHandlerEnabled = false;
     private Handler worldEditHandler = null;
+
+    /**
+     * Used by auto-cleaning handlers
+     */
+    private final HandlerOps handlerOps = new HandlerOps() {
+        @Override
+        public JavaPlugin getPlugin() {
+            return LightCleaner.this;
+        }
+
+        @Override
+        public void scheduleMany(World world, LongHashSet chunkCoordinates) {
+            LightingService.schedule(ScheduleArguments.create()
+                    .setWorld(world)
+                    .setChunks(chunkCoordinates));
+        }
+
+        @Override
+        public void scheduleAuto(World world, int chunkX, int chunkZ) {
+            LightingAutoClean.schedule(world, chunkX, chunkZ, 20);
+        }
+    };
 
     private final Task closeForcedChunksTask = new Task(this) {
         @Override
@@ -145,13 +172,13 @@ public class LightCleaner extends PluginBase {
             if (enabled && worldEditHandler == null) {
                 try {
                     Class.forName("com.boydti.fawe.beta.IBatchProcessor");
-                    worldEditHandler = new com.bergerkiller.bukkit.lightcleaner.impl.FastAsyncWorldEditHandler();
+                    worldEditHandler = new com.bergerkiller.bukkit.lightcleaner.handler.FastAsyncWorldEditHandlerV1();
                 } catch (ClassNotFoundException ex) {
-                    worldEditHandler = new com.bergerkiller.bukkit.lightcleaner.impl.WorldEditHandler();
+                    worldEditHandler = new com.bergerkiller.bukkit.lightcleaner.handler.WorldEditHandler();
                 }
-                worldEditHandler.enable(this);
+                worldEditHandler.enable(handlerOps);
             } else if (!enabled && worldEditHandler != null) {
-                worldEditHandler.disable(this);
+                worldEditHandler.disable(handlerOps);
                 worldEditHandler = null;
                 log(Level.INFO, "WorldEdit was disabled, support for automatic light cleaning turned off");
             }

@@ -1,9 +1,7 @@
-package com.bergerkiller.bukkit.lightcleaner.impl;
+package com.bergerkiller.bukkit.lightcleaner.handler;
 
 import java.util.logging.Level;
 
-import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
-import com.bergerkiller.bukkit.lightcleaner.lighting.LightingAutoClean;
 import com.boydti.fawe.beta.IBatchProcessor;
 import com.boydti.fawe.beta.IChunk;
 import com.boydti.fawe.beta.IChunkGet;
@@ -20,21 +18,23 @@ import com.sk89q.worldedit.util.eventbus.Subscribe;
  * Uses the experimental (beta) API of FastAsyncWorldEdit to
  * detect chunks that change.
  */
-public class FastAsyncWorldEditHandler implements Handler {
+public class FastAsyncWorldEditHandlerV1 implements Handler {
     private final EventBus eventBus;
+    private HandlerOps ops;
 
-    public FastAsyncWorldEditHandler() {
+    public FastAsyncWorldEditHandlerV1() {
         this.eventBus = WorldEdit.getInstance().getEventBus();
     }
 
     @Override
-    public void enable(LightCleaner plugin) {
+    public void enable(HandlerOps ops) {
+        this.ops = ops;
         eventBus.register(this);
-        plugin.log(Level.INFO, "Added support for automatic light cleaning when FastAsyncWorldEdit operations are performed!");
+        ops.getPlugin().getLogger().log(Level.INFO, "Added support for automatic light cleaning when FastAsyncWorldEdit operations are performed!");
     }
 
     @Override
-    public void disable(LightCleaner plugin) {
+    public void disable(HandlerOps ops) {
         eventBus.unregister(this);
     }
 
@@ -50,7 +50,7 @@ public class FastAsyncWorldEditHandler implements Handler {
 
                 @Override
                 public IChunkSet processSet(IChunk chunk, IChunkGet chunkGet, IChunkSet chunkSet) {
-                    LightingAutoClean.schedule(world, chunk.getX(), chunk.getZ(), 20);
+                    ops.scheduleAuto(world, chunk.getX(), chunk.getZ());
                     return chunkSet;
                 }
             });
