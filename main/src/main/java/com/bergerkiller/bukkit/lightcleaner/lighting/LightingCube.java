@@ -18,6 +18,7 @@ import com.bergerkiller.generated.net.minecraft.world.level.chunk.NibbleArrayHan
  */
 public class LightingCube {
     public static IntVector3 DEBUG_BLOCK = null; // logs light levels of blocks
+    public static int DEBUG_BLOCK_HEIGHT = Integer.MIN_VALUE; // set to the height level at the x/z of this block
     public static final int OOC = ~0xf; // Outside Of Cube
     public final LightingChunk owner;
     public final LightingCubeNeighboring neighbors = new LightingCubeNeighboring();
@@ -285,22 +286,37 @@ public class LightingCube {
             DEBUG_BLOCK.getChunkY() == this.cy &&
             DEBUG_BLOCK.getChunkZ() == this.owner.chunkZ
         ) {
-            String message = "Block [" + DEBUG_BLOCK.x + "/" + DEBUG_BLOCK.y + "/" + DEBUG_BLOCK.z + "]";
-            if (this.skyLight != null) {
-                int level = this.skyLight.get(DEBUG_BLOCK.x & 0xf, DEBUG_BLOCK.y & 0xf, DEBUG_BLOCK.z & 0xf);
-                message += " SkyLight=" + level;
-                if (skyLightFuture != null) {
-                    message += " [changed]";
+            CommonUtil.broadcast("Block [" + DEBUG_BLOCK.x + "/" + DEBUG_BLOCK.y + "/" + DEBUG_BLOCK.z + "]:");
+
+            // Light levels
+            {
+                String message = " ";
+                if (this.skyLight != null) {
+                    int level = this.skyLight.get(DEBUG_BLOCK.x & 0xf, DEBUG_BLOCK.y & 0xf, DEBUG_BLOCK.z & 0xf);
+                    message += " SkyLight=" + level;
+                    if (skyLightFuture != null) {
+                        message += " [changed]";
+                    }
                 }
-            }
-            if (this.blockLight != null) {
-                int level = this.blockLight.get(DEBUG_BLOCK.x & 0xf, DEBUG_BLOCK.y & 0xf, DEBUG_BLOCK.z & 0xf);
-                message += " BlockLight=" + level;
-                if (blockLightFuture != null) {
-                    message += " [changed]";
+                if (this.blockLight != null) {
+                    int level = this.blockLight.get(DEBUG_BLOCK.x & 0xf, DEBUG_BLOCK.y & 0xf, DEBUG_BLOCK.z & 0xf);
+                    message += " BlockLight=" + level;
+                    if (blockLightFuture != null) {
+                        message += " [changed]";
+                    }
                 }
+                CommonUtil.broadcast(message);
             }
-            CommonUtil.broadcast(message);
+
+            // Other helpful propertes
+            int emitted = this.emittedLight.get(DEBUG_BLOCK.x & 0xf, DEBUG_BLOCK.y & 0xf, DEBUG_BLOCK.z & 0xf);
+            int opacity = this.opacity.get(DEBUG_BLOCK.x & 0xf, DEBUG_BLOCK.y & 0xf, DEBUG_BLOCK.z & 0xf);
+            BlockFaceSet opaqueFaces = this.opaqueFaces.get(DEBUG_BLOCK.x & 0xf, DEBUG_BLOCK.y & 0xf, DEBUG_BLOCK.z & 0xf);
+            CommonUtil.broadcast("  Emission=" + emitted + " Opacity=" + opacity);
+            CommonUtil.broadcast("  OpaqueFaces=" + opaqueFaces);
+            CommonUtil.broadcast("  Height=" + ((DEBUG_BLOCK_HEIGHT == Integer.MIN_VALUE)
+                    ? "UNKNOWN" : Integer.toString(DEBUG_BLOCK_HEIGHT)) +
+                    " Height-Min=" + owner.minY + " Height-Max=" + owner.maxY);
         }
 
         // No updates performed

@@ -183,6 +183,18 @@ public class LightingChunk {
             }
         }
 
+        // Log the DebugBlock's height level
+        int dbg_x = -1;
+        int dbg_z = -1;
+        if (LightingCube.DEBUG_BLOCK != null &&
+            LightingCube.DEBUG_BLOCK.getChunkX() == this.chunkX &&
+            LightingCube.DEBUG_BLOCK.getChunkZ() == this.chunkZ
+        ) {
+            dbg_x = LightingCube.DEBUG_BLOCK.x & 0xF;
+            dbg_z = LightingCube.DEBUG_BLOCK.z & 0xF;
+            LightingCube.DEBUG_BLOCK_HEIGHT = Integer.MIN_VALUE;
+        }
+
         // Initialize and then load sky light heightmap information
         if (this.hasSkyLight) {
             try (Timings t = LCTimings.INIT_HEIGHT_MAP.start()) {
@@ -190,7 +202,11 @@ public class LightingChunk {
                 int max_slice_y = 0;
                 for (int x = 0; x < 16; ++x) {
                     for (int z = 0; z < 16; ++z) {
-                        int y = Math.max(this.minY, heightmap.getHeight(x, z));
+                        int heightmap_value = heightmap.getHeight(x, z);
+                        if (x == dbg_x && z == dbg_z) {
+                            LightingCube.DEBUG_BLOCK_HEIGHT = heightmap_value;
+                        }
+                        int y = Math.max(this.minY, heightmap_value);
                         this.heightmap[this.getHeightKey(x, z)] = y;
                         max_slice_y = Math.max(y, max_slice_y);
                     }

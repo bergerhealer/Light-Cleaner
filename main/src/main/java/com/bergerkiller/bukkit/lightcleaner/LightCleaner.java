@@ -10,6 +10,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
@@ -246,17 +248,37 @@ public class LightCleaner extends PluginBase {
                 if (args.length >= 2 && args[1].equalsIgnoreCase("clear")) {
                     LightingCube.DEBUG_BLOCK = null;
                     sender.sendMessage(ChatColor.GREEN + "Cleared block being debugged");
+                    return true;
+                } else if (args.length >= 2 && (args[1].equals("target") || args[1].equals("above"))) {
+                    if (!(sender instanceof Player)) {
+                        sender.sendMessage(ChatColor.RED + "Only for players!");
+                        return true;
+                    }
+                    Block target = ((Player) sender).getTargetBlockExact(128);
+                    if (target == null) {
+                        sender.sendMessage(ChatColor.RED + "You are not looking at a block");
+                        return true;
+                    }
+
+                    LightingCube.DEBUG_BLOCK = new IntVector3(target);
+                    if (args[1].equals("above")) {
+                        LightingCube.DEBUG_BLOCK = LightingCube.DEBUG_BLOCK.add(BlockFace.UP);
+                    }
                 } else if (args.length <= 3) {
                     sender.sendMessage(ChatColor.RED + "/cleanlight debugblock <x> <y> <z>");
+                    sender.sendMessage(ChatColor.RED + "/cleanlight debugblock target");
+                    sender.sendMessage(ChatColor.RED + "/cleanlight debugblock above");
                     sender.sendMessage(ChatColor.RED + "/cleanlight debugblock clear");
+                    return true;
                 } else {
                     int x = ParseUtil.parseInt(args[1], 0);
                     int y = ParseUtil.parseInt(args[2], 0);
                     int z = ParseUtil.parseInt(args[3], 0);
                     LightingCube.DEBUG_BLOCK = new IntVector3(x, y, z);
-                    sender.sendMessage(ChatColor.GREEN + "Will show generated levels for block " +
-                            x + "/" + y + "/" + z);
                 }
+                sender.sendMessage(ChatColor.GREEN + "Will show generated levels for block " +
+                        LightingCube.DEBUG_BLOCK.x + "/" + LightingCube.DEBUG_BLOCK.y + "/" +
+                        LightingCube.DEBUG_BLOCK.z);
                 return true;
             }
             if (subCmd.equalsIgnoreCase("abort")) {
