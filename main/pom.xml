@@ -14,6 +14,14 @@
     <packaging>jar</packaging>
 
     <dependencies>
+        <!-- Preloader -->
+        <dependency>
+            <groupId>com.bergerkiller.bukkit.preloader</groupId>
+            <artifactId>PluginPreloader</artifactId>
+            <version>${project.preloaderversion}</version>
+            <scope>compile</scope>
+        </dependency>
+
         <!-- Automatic cleaning handlers -->
         <dependency>
             <groupId>com.bergerkiller.bukkit</groupId>
@@ -99,9 +107,16 @@
                 <version>3.2.0</version>
                 <configuration>
                     <createDependencyReducedPom>true</createDependencyReducedPom>
+                    <relocations>
+                        <relocation>
+                            <pattern>com.bergerkiller.bukkit.preloader</pattern>
+                            <shadedPattern>com.bergerkiller.bukkit.lightcleaner</shadedPattern>
+                        </relocation>
+                    </relocations>
                     <artifactSet>
                         <includes>
                             <include>com.bergerkiller.bukkit:LightCleaner-handler-*</include>
+                            <include>com.bergerkiller.bukkit.preloader</include>
                         </includes>
                     </artifactSet>
                 </configuration>

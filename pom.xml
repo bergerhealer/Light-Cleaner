@@ -9,12 +9,13 @@
     <packaging>pom</packaging>
 
     <properties>
-        <revision>1.17.1-v2</revision>
+        <revision>1.18.1-v1</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.build.number>NO-CI</project.build.number>
         <project.maven-compiler.version>2.3.2</project.maven-compiler.version>
         <project.serverversion>1.16.1-R0.1</project.serverversion>
         <project.bkcversion>1.17.1-v1-SNAPSHOT</project.bkcversion>
+        <project.preloaderversion>1.5</project.preloaderversion>
         <project.cibuild/>
     </properties>
 
