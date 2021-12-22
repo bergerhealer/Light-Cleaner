@@ -273,13 +273,20 @@ public class LightingTaskBatch implements LightingTask {
 
             // Outside of the lock, start loading the next chunk
             final CompletableFuture<Void> f_nextChunkFuture = nextChunkFuture;
+            final LightingChunk f_nextChunk = nextChunk;
             nextChunk.forcedChunk.move(WorldUtil.forceChunkLoaded(world, nextChunk.chunkX, nextChunk.chunkZ));
             nextChunk.forcedChunk.getChunkAsync().whenComplete((chunk, t) -> {
                 synchronized (chunks_lock) {
                     numBeingLoaded--;
                 }
 
-                f_nextChunkFuture.complete(null);
+                // Right away fill the LightingChunk with data from this Chunk
+                // Do this using LC's own plugin task, so BKCommonLibs task doesn't show up in timings
+                CommonUtil.getPluginExecutor(LightCleaner.plugin).execute(() -> {
+                    f_nextChunk.fill(chunk, region_y_coords);
+                    f_nextChunkFuture.complete(null);
+                });
+
                 tryLoadMoreChunks(chunkFutures);
             });
         }
@@ -378,6 +385,8 @@ public class LightingTaskBatch implements LightingTask {
         }
 
         // Schedule, on the main thread, to fill all the loaded chunks with data
+        // No longer used - is now done during the chunk loading stage
+        /*
         CompletableFuture<Void> chunkFillFuture = CompletableFuture.runAsync(() -> {
             synchronized (this.chunks_lock) {
                 if (!this.aborted) {
@@ -391,6 +400,7 @@ public class LightingTaskBatch implements LightingTask {
         if (!waitForCheckAborted(chunkFillFuture)) {
             return;
         }
+        */
 
         // Now that all chunks we can process are filled, let all the 16x16x16 cubes know of their neighbors
         // This neighboring data is only used during the fix() (initialize + spread) phase
