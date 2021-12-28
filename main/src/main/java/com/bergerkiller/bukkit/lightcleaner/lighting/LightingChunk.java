@@ -87,6 +87,16 @@ public class LightingChunk {
     }
 
     /**
+     * Resets neighbor information, so that {@link #notifyAccessible(LightingChunk)}
+     * can be called again to recompute this information.
+     */
+    public void resetAccessible() {
+        neighbors.clear();
+        start = new IntVector2(1, 1);
+        end = new IntVector2(14, 14);
+    }
+
+    /**
      * Notifies that a new chunk is accessible.
      *
      * @param chunk that is accessible

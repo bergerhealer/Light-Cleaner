@@ -7,6 +7,15 @@ public class LightingChunkNeighboring {
     public final LightingChunk[] values = new LightingChunk[4];
 
     /**
+     * Clears all neighbors
+     */
+    public void clear() {
+        for (int i = 0; i < 4; i++) {
+            values[i] = null;
+        }
+    }
+
+    /**
      * Generates a key ranging 0 - 3 for fixed x/z combinations<br>
      * - Bit 1 is set to contain which of the two is not 1<br>
      * - Bit 2 is set to contain whether x/z is 1 or -1<br><br>

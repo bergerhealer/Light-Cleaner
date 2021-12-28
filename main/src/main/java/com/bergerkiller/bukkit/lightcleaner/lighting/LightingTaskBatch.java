@@ -311,6 +311,15 @@ public class LightingTaskBatch implements LightingTask {
         return CompletableFuture.allOf(chunkFutures);
     }
 
+    private void notifyNeighborsAccessible() {
+        for (LightingChunk lc : this.chunks) {
+            lc.resetAccessible();
+            for (LightingChunk neigh : this.chunks) {
+                lc.notifyAccessible(neigh);
+            }
+        }
+    }
+
     @Override
     public void process() {
         // Begin
@@ -334,6 +343,11 @@ public class LightingTaskBatch implements LightingTask {
             // Update fields. We can remove the coordinates to free memory.
             this.chunks = chunks_new;
             this.chunks_coords = null;
+
+            // Early on, tell all chunks we are processing what neighbors probably exist
+            // This is important while loading data, as it doesn't load data that has no
+            // neighbors for it.
+            notifyNeighborsAccessible();
         }
 
         // Check aborted
@@ -369,11 +383,7 @@ public class LightingTaskBatch implements LightingTask {
             this.chunks = new_chunks;
 
             // Tell all the (remaining) chunks about other neighbouring chunks before initialization
-            for (LightingChunk lc : new_chunks) {
-                for (LightingChunk neigh : new_chunks) {
-                    lc.notifyAccessible(neigh);
-                }
-            }
+            this.notifyNeighborsAccessible();
 
             // Log when chunks fail to be loaded
             if (failed_chunk_count > 0) {
