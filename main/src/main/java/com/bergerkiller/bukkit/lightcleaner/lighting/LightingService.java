@@ -193,69 +193,80 @@ public class LightingService extends AsyncTask {
 
             LongHashSet chunks_filtered = new LongHashSet(chunks.size());
             Set<IntVector2> region_coords_filtered = new HashSet<IntVector2>();
+            int[] regionYCoordinates;
             LongIterator iter = chunks.longIterator();
 
             if (args.getLoadedChunksOnly()) {
                 // Remove coordinates of chunks that aren't loaded
+                Set<Integer> chunkYCoords = new HashSet<Integer>();
                 while (iter.hasNext()) {
-                    long chunk = iter.next();
-                    int cx = MathUtil.longHashMsw(chunk);
-                    int cz = MathUtil.longHashLsw(chunk);
-                    if (WorldUtil.isLoaded(args.getWorld(), cx, cz)) {
-                        chunks_filtered.add(chunk);
+                    long chunkKey = iter.next();
+                    int cx = MathUtil.longHashMsw(chunkKey);
+                    int cz = MathUtil.longHashLsw(chunkKey);
+                    Chunk loadedChunk = WorldUtil.getChunk(args.getWorld(), cx, cz);
+                    if (loadedChunk != null) {
+                        chunks_filtered.add(chunkKey);
                         region_coords_filtered.add(new IntVector2(
                                 WorldUtil.chunkToRegionIndex(cx),
                                 WorldUtil.chunkToRegionIndex(cz)));
+                        chunkYCoords.addAll(WorldUtil.getLoadedSectionCoordinates(loadedChunk));
                     }
                 }
-            } else if (LightCleaner.skipWorldEdge) {
-                // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
-                // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
-                // To check for border chunks, we check that all 9 chunks are are available
-                Map<IntVector2, Boolean> tmp = new HashMap<>();
-                while (iter.hasNext()) {
-                    long chunk = iter.next();
-                    int cx = MathUtil.longHashMsw(chunk);
-                    int cz = MathUtil.longHashLsw(chunk);
 
-                    boolean fully_loaded = true;
-                    for (int dx = -LightCleaner.WORLD_EDGE; dx <= LightCleaner.WORLD_EDGE && fully_loaded; dx++) {
-                        for (int dz = -LightCleaner.WORLD_EDGE; dz <= LightCleaner.WORLD_EDGE && fully_loaded; dz++) {
-                            IntVector2 pos = new IntVector2(cx + dx, cz + dz);
-                            fully_loaded &= tmp.computeIfAbsent(pos, p -> WorldUtil.isChunkAvailable(args.getWorld(), p.x, p.z)).booleanValue();
+                // Turn chunk y-coordinates into region y-coordinates
+                regionYCoordinates = chunkYCoords.stream()
+                        .mapToInt(Integer::intValue)
+                        .map(WorldUtil::chunkToRegionIndex)
+                        .sorted().distinct().toArray();
+            } else {
+                if (LightCleaner.skipWorldEdge) {
+                    // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
+                    // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
+                    // To check for border chunks, we check that all 9 chunks are are available
+                    Map<IntVector2, Boolean> tmp = new HashMap<>();
+                    while (iter.hasNext()) {
+                        long chunk = iter.next();
+                        int cx = MathUtil.longHashMsw(chunk);
+                        int cz = MathUtil.longHashLsw(chunk);
+
+                        boolean fully_loaded = true;
+                        for (int dx = -LightCleaner.WORLD_EDGE; dx <= LightCleaner.WORLD_EDGE && fully_loaded; dx++) {
+                            for (int dz = -LightCleaner.WORLD_EDGE; dz <= LightCleaner.WORLD_EDGE && fully_loaded; dz++) {
+                                IntVector2 pos = new IntVector2(cx + dx, cz + dz);
+                                fully_loaded &= tmp.computeIfAbsent(pos, p -> WorldUtil.isChunkAvailable(args.getWorld(), p.x, p.z)).booleanValue();
+                            }
+                        }
+
+                        if (fully_loaded) {
+                            chunks_filtered.add(chunk);
+                            region_coords_filtered.add(new IntVector2(
+                                    WorldUtil.chunkToRegionIndex(cx),
+                                    WorldUtil.chunkToRegionIndex(cz)));
                         }
                     }
-
-                    if (fully_loaded) {
-                        chunks_filtered.add(chunk);
-                        region_coords_filtered.add(new IntVector2(
-                                WorldUtil.chunkToRegionIndex(cx),
-                                WorldUtil.chunkToRegionIndex(cz)));
+                } else {
+                    // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
+                    // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
+                    while (iter.hasNext()) {
+                        long chunk = iter.next();
+                        int cx = MathUtil.longHashMsw(chunk);
+                        int cz = MathUtil.longHashLsw(chunk);
+                        if (WorldUtil.isChunkAvailable(args.getWorld(), cx, cz)) {
+                            chunks_filtered.add(chunk);
+                            region_coords_filtered.add(new IntVector2(
+                                    WorldUtil.chunkToRegionIndex(cx),
+                                    WorldUtil.chunkToRegionIndex(cz)));
+                        }
                     }
                 }
-            } else {
-                // Remove coordinates of chunks that don't actually exist (avoid generating new chunks)
-                // isChunkAvailable isn't very fast, but fast enough below this threshold of chunks
-                while (iter.hasNext()) {
-                    long chunk = iter.next();
-                    int cx = MathUtil.longHashMsw(chunk);
-                    int cz = MathUtil.longHashLsw(chunk);
-                    if (WorldUtil.isChunkAvailable(args.getWorld(), cx, cz)) {
-                        chunks_filtered.add(chunk);
-                        region_coords_filtered.add(new IntVector2(
-                                WorldUtil.chunkToRegionIndex(cx),
-                                WorldUtil.chunkToRegionIndex(cz)));
-                    }
+
+                // For all filtered chunk coordinates, compute loadable regions
+                {
+                    Set<IntVector3> regions = WorldUtil.getWorldRegions3ForXZ(args.getWorld(), region_coords_filtered);
+
+                    // Simplify to just the unique Y-coordinates
+                    regionYCoordinates = regions.stream().mapToInt(r -> r.y).sorted().distinct().toArray();
                 }
-            }
-
-            // For all filtered chunk coordinates, compute regions
-            int[] regionYCoordinates;
-            {
-                Set<IntVector3> regions = WorldUtil.getWorldRegions3ForXZ(args.getWorld(), region_coords_filtered);
-
-                // Simplify to just the unique Y-coordinates
-                regionYCoordinates = regions.stream().mapToInt(r -> r.y).sorted().distinct().toArray();
             }
 
             // Schedule it
