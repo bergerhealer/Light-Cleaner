@@ -510,7 +510,37 @@ public class LightingService extends AsyncTask {
     }
 
     /**
-     * Clears all pending tasks, does continue with the current tasks
+     * Clears all pending tasks for a certain world
+     *
+     * @param world
+     */
+    public static void clearTasksForWorld(World world) {
+        synchronized (tasks) {
+            Iterator<LightingTask> iter = tasks.iterator();
+            while (iter.hasNext()) {
+                if (iter.next().getWorld() == world) {
+                    iter.remove();
+                }
+            }
+        }
+
+        final LightingTask current = currentTask;
+        if (current != null && current.getWorld() == world) {
+            current.abort();
+        }
+
+        synchronized (tasks) {
+            Iterator<LightingTask> iter = tasks.iterator();
+            while (iter.hasNext()) {
+                if (iter.next().getWorld() == world) {
+                    iter.remove();
+                }
+            }
+        }
+    }
+
+    /**
+     * Clears all pending and ongoing tasks
      */
     public static void clearTasks() {
         synchronized (tasks) {
