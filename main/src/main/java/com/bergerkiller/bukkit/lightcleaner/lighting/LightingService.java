@@ -1,6 +1,7 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.AsyncTask;
+import com.bergerkiller.bukkit.common.Task;
 import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.config.CompressedDataReader;
@@ -386,48 +387,48 @@ public class LightingService extends AsyncTask {
                 for (int c = 0; c < count; c++) {
                     String worldName = stream.readUTF();
                     World world = Bukkit.getWorld(worldName);
-                    if (world == null) {
-                        // Load it?
-                        if (new File(Bukkit.getWorldContainer(), worldName).exists()) {
-                            world = Bukkit.createWorld(new WorldCreator(worldName));
-                        } else {
-                            missingWorlds.add(worldName);
-                        }
+                    if (world == null && !WorldUtil.isLoadableWorld(worldName)) {
+                        // Not loadable. Ignore the data, skip it entirely.
+                        missingWorlds.add(worldName);
+
+                        final int regionYCoordinateCount = stream.readInt();
+                        stream.skip(regionYCoordinateCount * (Integer.SIZE / Byte.SIZE));
+                        final int chunkCount = stream.readInt();
+                        stream.skip(chunkCount * (Long.SIZE / Byte.SIZE));
+                        continue;
                     }
 
                     // Load all the region coordinates
                     final int regionYCoordinateCount = stream.readInt();
-                    int[] regions;
-                    if (world == null) {
-                        regions = null;
-                        stream.skip(regionYCoordinateCount * (Integer.SIZE / Byte.SIZE));
-                    } else {
-                        regions = new int[regionYCoordinateCount];
-                        for (int i = 0; i < regionYCoordinateCount; i++) {
-                            regions[i] = stream.readInt();
-                        }
+                    final int[] regions = new int[regionYCoordinateCount];
+                    for (int i = 0; i < regionYCoordinateCount; i++) {
+                        regions[i] = stream.readInt();
                     }
 
                     // Load all the coordinates
                     final int chunkCount = stream.readInt();
-                    long[] coords;
-                    if (world == null) {
-                        coords = null;
-                        stream.skip(chunkCount * (Long.SIZE / Byte.SIZE));
+                    final long[] coords = new long[chunkCount];
+                    for (int i = 0; i < chunkCount; i++) {
+                        coords[i] = stream.readLong();
+                    }
+
+                    // If loaded, schedule right away
+                    // Otherwise, wait until next tick and try it then
+                    if (world != null) {
+                        schedule(new LightingTaskBatch(world, regions, coords));
                     } else {
-                        coords = new long[chunkCount];
-                        for (int i = 0; i < chunkCount; i++) {
-                            coords[i] = stream.readLong();
-                        }
+                        new Task(LightCleaner.plugin) {
+                            @Override
+                            public void run() {
+                                World world = Bukkit.getWorld(worldName);
+                                if (world != null) {
+                                    schedule(new LightingTaskBatch(world, regions, coords));
+                                } else {
+                                    LightCleaner.plugin.log(Level.WARNING, "Removed pending lighting operations for world " + worldName);
+                                }
+                            }
+                        }.start(2);
                     }
-
-                    // Skip if world isn't loaded
-                    if (world == null) {
-                        continue;
-                    }
-
-                    // Schedule and clear
-                    schedule(new LightingTaskBatch(world, regions, coords));
                 }
             }
         }.read()) {
