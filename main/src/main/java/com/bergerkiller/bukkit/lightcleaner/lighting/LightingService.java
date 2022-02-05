@@ -725,6 +725,7 @@ public class LightingService extends AsyncTask {
         private boolean forceSaving = false;
         private boolean silent = false;
         private int radius = Bukkit.getServer().getViewDistance();
+        private boolean radiusSpecified = false;
 
         public boolean getDebugMakeCorrupted() {
             return this.debugMakeCorrupted;
@@ -820,6 +821,7 @@ public class LightingService extends AsyncTask {
 
         public ScheduleArguments setRadius(int radius) {
             this.radius = radius;
+            this.radiusSpecified = true;
             return this;
         }
 
@@ -882,44 +884,28 @@ public class LightingService extends AsyncTask {
             return this;
         }
 
-        private boolean checkRadiusPermission(CommandSender sender, int radius) throws NoPermissionException {
+        private int adjustCleanRadius(CommandSender sender, int input) {
             if (Permission.CLEAN_ANY_RADIUS.has(sender)) {
-                return true;
+                return input;
             }
 
-            int maxRadius = 0;
             if (Permission.CLEAN_VIEW.has(sender)) {
-                maxRadius = Bukkit.getServer().getViewDistance();
-                if (radius <= maxRadius) {
-                    return true;
+                if (input <= Bukkit.getServer().getViewDistance()) {
+                    return input;
                 }
             }
 
-            if (Permission.CLEAN_BY_RADIUS.has(sender, Integer.toString(radius))) {
-                return true;
+            if (Permission.CLEAN_BY_RADIUS.has(sender, Integer.toString(input))) {
+                return input;
             }
 
             for (int i = 100; i >= 1; i--) {
                 if (Permission.CLEAN_BY_RADIUS.has(sender, Integer.toString(i))) {
-                    if (i > maxRadius) {
-                        maxRadius = i;
-                    }
-                    break;
+                    return Math.min(i, input);
                 }
             }
 
-            if (radius <= maxRadius) {
-                return true;
-            }
-
-            if (maxRadius == 0) {
-                throw new NoPermissionException();
-            } else {
-                int n = (maxRadius * 2 + 1);
-                sender.sendMessage(ChatColor.RED + "You do not have permission to clean areas larger than " +
-                        n + " x " + n);
-                return false;
-            }
+            return 0;
         }
 
         /**
@@ -972,8 +958,22 @@ public class LightingService extends AsyncTask {
                     // Players with the CLEAN_ANY permission can clean any radius
                     // Players with the CLEAN_VIEW permission can clean up to the view radius
                     // Players with the CLEAN_BY_RADIUS permission can clean up to [radius]
-                    if (sender instanceof Player && !checkRadiusPermission(sender, this.getRadius())) {
-                        return false;
+                    if (sender instanceof Player) {
+                        int maximumRadius = adjustCleanRadius(sender, this.getRadius());
+                        if (maximumRadius == 0) {
+                            throw new NoPermissionException();
+                        } else if (radius > maximumRadius) {
+                            if (this.radiusSpecified) {
+                                // Player specified radius on command-line, disallow
+                                int n = (maximumRadius * 2 + 1);
+                                sender.sendMessage(ChatColor.RED + "You do not have permission to clean areas larger than " +
+                                        n + " x " + n);
+                                return false;
+                            } else {
+                                // Default radius assumed, lower it to the maximum for this player
+                                this.setRadius(maximumRadius);
+                            }
+                        }
                     }
                 }
 
