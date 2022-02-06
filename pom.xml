@@ -15,7 +15,7 @@
         <project.maven-compiler.version>2.3.2</project.maven-compiler.version>
         <project.serverversion>1.16.1-R0.1</project.serverversion>
         <project.bkcversion>1.17.1-v1-SNAPSHOT</project.bkcversion>
-        <project.preloaderversion>1.5</project.preloaderversion>
+        <project.preloaderversion>1.6</project.preloaderversion>
         <project.cibuild/>
     </properties>
 
