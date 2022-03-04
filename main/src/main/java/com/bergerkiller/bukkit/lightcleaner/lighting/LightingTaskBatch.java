@@ -275,21 +275,46 @@ public class LightingTaskBatch implements LightingTask {
             final CompletableFuture<Void> f_nextChunkFuture = nextChunkFuture;
             final LightingChunk f_nextChunk = nextChunk;
             nextChunk.forcedChunk.move(WorldUtil.forceChunkLoaded(world, nextChunk.chunkX, nextChunk.chunkZ));
-            nextChunk.forcedChunk.getChunkAsync().whenComplete((chunk, t) -> {
-                synchronized (chunks_lock) {
-                    numBeingLoaded--;
+
+            // Process this chunk, or if not yet loaded, process it in the future when it is
+            CompletableFuture<Chunk> future = nextChunk.forcedChunk.getChunkAsync();
+            if (future.isDone()) {
+                // Already loaded, stay within this while loop to avoid stack overflow errors
+                try {
+                    onChunkLoaded(f_nextChunk, future.get(), f_nextChunkFuture);
+                } catch (Throwable t) {
+                    // get() can throw if an error occurred trying to load the chunk asynchronously!
+                    f_nextChunkFuture.completeExceptionally(t);
                 }
-
-                // Right away fill the LightingChunk with data from this Chunk
-                // Do this using LC's own plugin task, so BKCommonLibs task doesn't show up in timings
-                CommonUtil.getPluginExecutor(LightCleaner.plugin).execute(() -> {
-                    f_nextChunk.fill(chunk, region_y_coords);
-                    f_nextChunkFuture.complete(null);
+            } else {
+                // Once done, perform logic and from there check for more chunks to load in
+                future.whenComplete((chunk, t) -> {
+                    if (t != null) {
+                        f_nextChunkFuture.completeExceptionally(t);
+                    } else {
+                        onChunkLoaded(f_nextChunk, chunk, f_nextChunkFuture);
+                        tryLoadMoreChunks(chunkFutures);
+                    }
                 });
-
-                tryLoadMoreChunks(chunkFutures);
-            });
+            }
         }
+    }
+
+    private void onChunkLoaded(final LightingChunk lightingChunk, final Chunk chunk, final CompletableFuture<Void> doneFuture) {
+        synchronized (chunks_lock) {
+            numBeingLoaded--;
+        }
+
+        // Right away fill the LightingChunk with data from this Chunk
+        // Do this using LC's own plugin task, so BKCommonLibs task doesn't show up in timings
+        CommonUtil.getPluginExecutor(LightCleaner.plugin).execute(() -> {
+            try {
+                lightingChunk.fill(chunk, region_y_coords);
+                doneFuture.complete(null);
+            } catch (Throwable t) {
+                doneFuture.completeExceptionally(t);
+            }
+        });
     }
 
     @SuppressWarnings("unchecked")
