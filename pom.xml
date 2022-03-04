@@ -9,7 +9,7 @@
     <packaging>pom</packaging>
 
     <properties>
-        <revision>1.18.2-v1-SNAPSHOT</revision>
+        <revision>1.18.2-v1</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.build.number>NO-CI</project.build.number>
         <project.maven-compiler.version>2.3.2</project.maven-compiler.version>
