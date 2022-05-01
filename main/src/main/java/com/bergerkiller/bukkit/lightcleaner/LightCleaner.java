@@ -27,6 +27,8 @@ import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.ParseUtil;
+import com.bergerkiller.bukkit.common.utils.WorldUtil;
+import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.lightcleaner.handler.FastAsyncWorldEditHandlerV1;
 import com.bergerkiller.bukkit.lightcleaner.handler.FastAsyncWorldEditHandlerV2;
@@ -249,12 +251,12 @@ public class LightCleaner extends PluginBase {
                     LightingCube.DEBUG_BLOCK = null;
                     sender.sendMessage(ChatColor.GREEN + "Cleared block being debugged");
                     return true;
-                } else if (args.length >= 2 && (args[1].equals("target") || args[1].equals("above"))) {
+                } else if (args.length >= 2 && (args[1].equals("target") || args[1].equals("above") || args[1].equals("below"))) {
                     if (!(sender instanceof Player)) {
                         sender.sendMessage(ChatColor.RED + "Only for players!");
                         return true;
                     }
-                    Block target = ((Player) sender).getTargetBlockExact(128);
+                    Block target = WorldUtil.rayTraceBlock(((Player) sender).getEyeLocation(), 128);
                     if (target == null) {
                         sender.sendMessage(ChatColor.RED + "You are not looking at a block");
                         return true;
@@ -263,6 +265,9 @@ public class LightCleaner extends PluginBase {
                     LightingCube.DEBUG_BLOCK = new IntVector3(target);
                     if (args[1].equals("above")) {
                         LightingCube.DEBUG_BLOCK = LightingCube.DEBUG_BLOCK.add(BlockFace.UP);
+                    }
+                    if (args[1].equals("below")) {
+                        LightingCube.DEBUG_BLOCK = LightingCube.DEBUG_BLOCK.add(BlockFace.DOWN);
                     }
                 } else if (args.length <= 3) {
                     sender.sendMessage(ChatColor.RED + "/cleanlight debugblock <x> <y> <z>");
@@ -276,9 +281,15 @@ public class LightCleaner extends PluginBase {
                     int z = ParseUtil.parseInt(args[3], 0);
                     LightingCube.DEBUG_BLOCK = new IntVector3(x, y, z);
                 }
+
+                String blockInfoAppend = "";
+                if (sender instanceof Player) {
+                    BlockData data = WorldUtil.getBlockData(((Player) sender).getWorld(), LightingCube.DEBUG_BLOCK);
+                    blockInfoAppend = " [" + data.toString() + "]";
+                }
                 sender.sendMessage(ChatColor.GREEN + "Will show generated levels for block " +
                         LightingCube.DEBUG_BLOCK.x + "/" + LightingCube.DEBUG_BLOCK.y + "/" +
-                        LightingCube.DEBUG_BLOCK.z);
+                        LightingCube.DEBUG_BLOCK.z + blockInfoAppend);
                 return true;
             }
             if (subCmd.equalsIgnoreCase("abort")) {
