@@ -2,6 +2,9 @@ package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import java.util.concurrent.CompletableFuture;
 
+import org.bukkit.World;
+
+import com.bergerkiller.bukkit.common.Common;
 import com.bergerkiller.bukkit.common.Timings;
 import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.collections.BlockFaceSet;
@@ -33,6 +36,10 @@ public class LightingCube {
     private static final NibbleArrayHandle ALL_ZERO_NIBBLE_ARRAY = NibbleArrayHandle.createNew();
     private static final BlockFaceSetSection ALL_TRANSPARENT_OPAQUE_FACES = new BlockFaceSetSection();
 
+    // BKCL added this at some point
+    private static final GetEmissionFunc GET_EMISSION_FUNC = Common.hasCapability("Common:BlockData:EmissionBlockParameter")
+            ? GetEmissionFunc.withBlockParam() : GetEmissionFunc.legacy();
+
     private LightingCube(Data currentData) {
         this.owner = currentData.owner;
         this.skyLight = currentData.currentSkyLight;
@@ -63,7 +70,7 @@ public class LightingCube {
             for (x = owner.start.x; x <= owner.end.x; x++) {
                 for (y = 0; y < 16; y++) {
                     info = currentData.chunkSection.getBlockData(x, y, z);
-                    blockEmission = info.getEmission();
+                    blockEmission = GET_EMISSION_FUNC.getEmission(info, owner.world, worldX+x, worldY+y, worldZ+z);
                     opacity = info.getOpacity(owner.world, worldX+x, worldY+y, worldZ+z);
                     if (opacity >= 0xf) {
                         opacity = 0xf;
@@ -398,6 +405,20 @@ public class LightingCube {
             try (Timings t = LCTimings.FILL_CUBE_LIGHT.start()) {
                 return new Data(owner, cy, chunkSection);
             }
+        }
+    }
+
+    @FunctionalInterface
+    private static interface GetEmissionFunc {
+        int getEmission(BlockData data, World world, int x, int y, int z);
+
+        @SuppressWarnings("deprecation")
+        public static GetEmissionFunc legacy() {
+            return (data, world, x, y, z) -> data.getEmission();
+        }
+
+        public static GetEmissionFunc withBlockParam() {
+            return (data, world, x, y, z) -> data.getEmission(world, x, y, z);
         }
     }
 }
