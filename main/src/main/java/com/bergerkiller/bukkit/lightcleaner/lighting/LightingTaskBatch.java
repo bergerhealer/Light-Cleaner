@@ -517,7 +517,7 @@ public class LightingTaskBatch implements LightingTask {
             // Save to chunk
             applyFutures[i] = lc.saveToChunk(bchunk, options.getForceSaving()).whenCompleteAsync((changed, t) -> {
                 if (t != null) {
-                    t.printStackTrace();
+                    LightCleaner.plugin.getLogger().log(Level.SEVERE, "Failed to apply lighting", t);
                 } else if (changed.booleanValue()) {
                     WorldUtil.queueChunkSendLight(world, lc.chunkX, lc.chunkZ);
                 }

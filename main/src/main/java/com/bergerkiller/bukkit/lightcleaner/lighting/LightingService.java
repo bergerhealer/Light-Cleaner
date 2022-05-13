@@ -600,9 +600,7 @@ public class LightingService extends AsyncTask {
         while (paused) {
             try {
                 Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            } catch (InterruptedException e) {}
             synchronized (tasks) {
                 if (tasks.isEmpty()) {
                     break; // Stop processing.

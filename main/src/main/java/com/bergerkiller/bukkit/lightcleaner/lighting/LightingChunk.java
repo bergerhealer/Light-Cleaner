@@ -482,7 +482,7 @@ public class LightingChunk {
                     }
                 }
             } catch (Throwable t) {
-                t.printStackTrace();
+                LightCleaner.plugin.getLogger().log(Level.SEVERE, "Failed to apply lighting", t);
             }
 
             // None of the futures completed true
