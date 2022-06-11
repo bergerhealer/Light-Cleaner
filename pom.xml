@@ -3,18 +3,19 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.bergerkiller.bukkit</groupId>
-    <artifactId>LightCleaner-parent</artifactId>
-    <version>${revision}</version>
-    <name>LightCleaner-parent</name>
-    <packaging>pom</packaging>
+    <artifactId>LightCleaner</artifactId>
+    <version>1.19-v1-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>LightCleaner</name>
+    <url>https://github.com/bergerhealer/light-cleaner/</url>
 
     <properties>
-        <revision>1.18.2-v2-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.build.number>NO-CI</project.build.number>
         <project.maven-compiler.version>2.3.2</project.maven-compiler.version>
         <project.serverversion>1.16.1-R0.1</project.serverversion>
-        <project.bkcversion>1.18.2-v2-SNAPSHOT</project.bkcversion>
+        <project.bkcversion>1.19-v1-SNAPSHOT</project.bkcversion>
         <project.preloaderversion>1.6</project.preloaderversion>
         <project.cibuild/>
     </properties>
@@ -48,6 +49,14 @@
     </repositories>
 
     <dependencies>
+        <!-- Preloader -->
+        <dependency>
+            <groupId>com.bergerkiller.bukkit.preloader</groupId>
+            <artifactId>PluginPreloader</artifactId>
+            <version>${project.preloaderversion}</version>
+            <scope>compile</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
@@ -68,42 +77,131 @@
         </dependency>
     </dependencies>
 
-    <modules>
-        <module>handler-base</module>
-        <module>handler-worldedit-v1</module>
-        <module>handler-worldedit-v2</module>
-        <module>handler-fawe-v1</module>
-        <module>handler-fawe-v2</module>
-        <module>main</module>
-    </modules>
-
+    <!-- Build -->
     <build>
+        <!-- Export artifact with name that includes the build number -->
+        <finalName>${project.name}-${project.version}-${project.build.number}</finalName>
         <defaultGoal>clean install</defaultGoal>
 
-        <!-- Flatten plugin ensures the stored pom.xml has variables resolved -->
+        <!-- Resources (the filtering allows us to use project properties in plugin.yml) -->
+        <resources>
+            <resource>
+                <directory>src/main/java</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>plugin.yml</include>
+                </includes>
+            </resource>
+        </resources>
+
+        <!-- Plugins -->
         <plugins>
+            <!-- Generate a jar containing the source javadoc -->
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>flatten-maven-plugin</artifactId>
-                <version>1.1.0</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.0.1</version>
                 <configuration>
-                    <updatePomFile>true</updatePomFile>
-                    <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                    <failOnError>false</failOnError>
+                    <doclint>none</doclint>
+                </configuration>
+            </plugin>
+
+            <!-- Generate a jar containing the java sources -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.0.1</version>
+            </plugin>
+
+            <!-- Compiling the source code -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${project.maven-compiler.version}</version>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                    <showWarnings>true</showWarnings>
+                    <showDeprecation>true</showDeprecation>
+                </configuration>
+            </plugin>
+
+            <!-- Combines this plugin jar and all dependencies into a single jar -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <createDependencyReducedPom>true</createDependencyReducedPom>
+                    <relocations>
+                        <relocation>
+                            <pattern>com.bergerkiller.bukkit.preloader</pattern>
+                            <shadedPattern>com.bergerkiller.bukkit.lightcleaner</shadedPattern>
+                        </relocation>
+                    </relocations>
+                    <artifactSet>
+                        <includes>
+                            <include>com.bergerkiller.bukkit.preloader</include>
+                        </includes>
+                    </artifactSet>
                 </configuration>
                 <executions>
                     <execution>
-                        <id>flatten</id>
-                        <phase>process-resources</phase>
                         <goals>
-                            <goal>flatten</goal>
+                            <goal>shade</goal>
                         </goals>
+                        <phase>package</phase>
                     </execution>
+                </executions>
+            </plugin>
+
+            <!-- Clean up original artifacts (this is to make testing easier) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>2.4.1</version>
+                <executions>
                     <execution>
-                        <id>flatten.clean</id>
-                        <phase>clean</phase>
+                        <id>auto-clean</id>
+                        <phase>package</phase>
                         <goals>
                             <goal>clean</goal>
                         </goals>
+                        <configuration>
+                            <excludeDefaultDirectories>true</excludeDefaultDirectories>
+                            <filesets>
+                                <fileset>
+                                    <directory>${project.build.directory}</directory>
+                                    <includes>
+                                        <include>original-*.jar</include>
+                                    </includes>
+                                    <followSymlinks>false</followSymlinks>
+                                </fileset>
+                            </filesets>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Copy the produced target to the static directory with just a base name -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.8</version>
+                <executions>
+                    <!-- Prepare the version-less output jar -->
+                    <execution>
+                        <id>version-less-jar</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <copy file="target/${project.name}-${project.version}-${project.build.number}.jar" tofile="target/static/${project.name}.jar"/>
+                            </target>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

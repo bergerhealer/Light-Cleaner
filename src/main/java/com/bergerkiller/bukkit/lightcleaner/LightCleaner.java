@@ -2,7 +2,6 @@ package com.bergerkiller.bukkit.lightcleaner;
 
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.logging.Level;
 
@@ -16,27 +15,23 @@ import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 
 import com.bergerkiller.bukkit.common.Common;
 import com.bergerkiller.bukkit.common.PluginBase;
 import com.bergerkiller.bukkit.common.Task;
+import com.bergerkiller.bukkit.common.bases.IntVector2;
 import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
+import com.bergerkiller.bukkit.common.events.MultiBlockChangeEvent;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.ParseUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
-import com.bergerkiller.bukkit.lightcleaner.handler.FastAsyncWorldEditHandlerV1;
-import com.bergerkiller.bukkit.lightcleaner.handler.FastAsyncWorldEditHandlerV2;
-import com.bergerkiller.bukkit.lightcleaner.handler.Handler;
-import com.bergerkiller.bukkit.lightcleaner.handler.HandlerOps;
-import com.bergerkiller.bukkit.lightcleaner.handler.WorldEditHandlerV1;
-import com.bergerkiller.bukkit.lightcleaner.handler.WorldEditHandlerV2;
-import com.bergerkiller.bukkit.lightcleaner.lighting.LightingAutoClean;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingCube;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
@@ -50,42 +45,6 @@ public class LightCleaner extends PluginBase {
     public static boolean skipWorldEdge = true;
     public static final int WORLD_EDGE = 2;
     public static Set<String> unsavedWorldNames = new HashSet<String>();
-    private boolean autoCleanHandlerEnabled = false;
-    private Handler autoCleanHandler = null;
-    private Handler.HandlerInstance autoCleanHandlerInstance = null;
-
-    /**
-     * All auto-cleaning handlers supported (shipped) with LightCleaner.
-     * These are used in order of priority, top first.
-     */
-    private static final List<Handler> ALL_AUTO_CLEAN_HANDLERS = Arrays.asList(
-            new FastAsyncWorldEditHandlerV2(),
-            new FastAsyncWorldEditHandlerV1(),
-            new WorldEditHandlerV2(),
-            new WorldEditHandlerV1()
-    );
-
-    /**
-     * Used by auto-cleaning handlers
-     */
-    private final HandlerOps handlerOps = new HandlerOps() {
-        @Override
-        public JavaPlugin getPlugin() {
-            return LightCleaner.this;
-        }
-
-        @Override
-        public void scheduleMany(World world, LongHashSet chunkCoordinates) {
-            LightingService.schedule(ScheduleArguments.create()
-                    .setWorld(world)
-                    .setChunks(chunkCoordinates));
-        }
-
-        @Override
-        public void scheduleAuto(World world, int chunkX, int chunkZ) {
-            LightingAutoClean.schedule(world, chunkX, chunkZ, 20);
-        }
-    };
 
     private final Task closeForcedChunksTask = new Task(this) {
         @Override
@@ -150,7 +109,7 @@ public class LightCleaner extends PluginBase {
 
         config.setHeader("autoCleanWorldEditEnabled", "\nSets whether lighting is cleaned up when players perform WorldEdit operations");
         config.addHeader("autoCleanWorldEditEnabled", "This is primarily useful for FastAsyncWorldEdit");
-        autoCleanHandlerEnabled = config.get("autoCleanWorldEditEnabled", false);
+        boolean autoCleanWorldeditEnabled = config.get("autoCleanWorldEditEnabled", false);
 
         config.setHeader("asyncLoadConcurrency", "\nHow many chunks are asynchronously loaded at the same time");
         config.addHeader("asyncLoadConcurrency", "Setting this value too high may overflow the internal queues. Too low and it will idle too much.");
@@ -170,6 +129,32 @@ public class LightCleaner extends PluginBase {
             log(Level.WARNING, "To silence this warning, set minFreeMemory to 0 in config.yml");
         }
 
+        // Register a handle for cleaning light automatically if enabled
+        if (autoCleanWorldeditEnabled) {
+            register(new Listener() {
+                @EventHandler(priority = EventPriority.MONITOR)
+                public void onMultiBlockChange(MultiBlockChangeEvent event) {
+                    if (event.getSource().isWorldedit()) {
+                        ScheduleArguments args = new ScheduleArguments();
+                        args.setWorld(event.getWorld());
+
+                        // Include the chunks neighbouring the chunks that changed
+                        LongHashSet chunks = new LongHashSet(event.getChunkCoordinates().size() * 2);
+                        for (IntVector2 coord : event.getChunkCoordinates()) {
+                            for (int cx = -1; cx <= 1; cx++) {
+                                for (int cz = -1; cz <= 1; cz++) {
+                                    chunks.add(coord.x + cx, coord.z + cz);
+                                }
+                            }
+                        }
+                        args.setChunks(chunks);
+
+                        LightingService.schedule(args);
+                    }
+                }
+            });
+        }
+        
         LightingService.loadPendingBatches();
 
         // Start unloading forced chunks after a delay
@@ -185,59 +170,6 @@ public class LightCleaner extends PluginBase {
         DelayClosedForcedChunk.clear();
 
         plugin = null;
-    }
-
-    @Override
-    public void updateDependency(Plugin plugin, String pluginName, boolean enabled) {
-        if (autoCleanHandler != null && !enabled && !autoCleanHandler.isSupported()) {
-            // Disable current handler, no longer supported
-            disableCurrentAutoCleanHandler();
-
-            // See if there's a fallback
-            detectAutoCleanHandlers();
-        } else if (enabled) {
-            // See if a handler enables itself
-            detectAutoCleanHandlers();
-        }
-    }
-
-    private void disableCurrentAutoCleanHandler() {
-        if (autoCleanHandlerInstance == null) {
-            return;
-        }
-
-        try {
-            autoCleanHandlerInstance.disable();
-            log(Level.INFO, autoCleanHandler.getDisableMessage());
-        } catch (Throwable t) {
-            getLogger().log(Level.SEVERE, "Failed to disable " + autoCleanHandler.getClass().getSimpleName(), t);
-        }
-        autoCleanHandler = null;
-        autoCleanHandlerInstance = null;
-    }
-
-    private void detectAutoCleanHandlers() {
-        // Only when enabled in the configuration
-        if (!autoCleanHandlerEnabled) {
-            return;
-        }
-
-        for (Handler handler : ALL_AUTO_CLEAN_HANDLERS) {
-            if (handler.isSupported()) {
-                if (autoCleanHandler == null || autoCleanHandler != handler) {
-                    disableCurrentAutoCleanHandler();
-
-                    try {
-                        autoCleanHandlerInstance = handler.enable(handlerOps);
-                        autoCleanHandler = handler;
-                        log(Level.INFO, handler.getEnableMessage());
-                    } catch (Throwable t) {
-                        getLogger().log(Level.SEVERE, "Failed to enable " + handler.getClass().getSimpleName(), t);
-                    }
-                }
-                break;
-            }
-        }
     }
 
     @Override
