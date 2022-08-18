@@ -672,7 +672,17 @@ public class LightingService extends AsyncTask {
 
             // Save all worlds: memory after garbage collecting is still too high
             LightCleaner.plugin.log(Level.WARNING, "Saving all worlds to free some memory...");
-            for (World world : WorldUtil.getWorlds()) {
+
+            // Retrieve world list. Not safe asynchronously but we try.
+            List<World> worlds = Collections.emptyList();
+            for (int n = 0; n < 10; n++) {
+                try {
+                    worlds = new ArrayList<>(WorldUtil.getWorlds());
+                } catch (Throwable t) {
+                    // Concurrent modification nonsense
+                }
+            }
+            for (World world : worlds) {
                 if (LightCleaner.isWorldSaveEnabled(world)) {
                     WorldUtil.saveToDisk(world);
                 }
