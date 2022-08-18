@@ -678,6 +678,7 @@ public class LightingService extends AsyncTask {
             for (int n = 0; n < 10; n++) {
                 try {
                     worlds = new ArrayList<>(WorldUtil.getWorlds());
+                    break;
                 } catch (Throwable t) {
                     // Concurrent modification nonsense
                 }
