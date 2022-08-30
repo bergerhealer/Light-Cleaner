@@ -1,6 +1,7 @@
 package com.bergerkiller.bukkit.lightcleaner.lighting;
 
 import com.bergerkiller.bukkit.common.bases.IntVector2;
+import com.bergerkiller.bukkit.common.chunk.ForcedChunk;
 import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.LogicUtil;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
@@ -8,6 +9,7 @@ import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.common.wrappers.LongHashSet;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.bukkit.lightcleaner.lighting.LightingService.ScheduleArguments;
+import com.bergerkiller.mountiplex.reflection.SafeMethod;
 
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
@@ -274,7 +276,7 @@ public class LightingTaskBatch implements LightingTask {
             // Outside of the lock, start loading the next chunk
             final CompletableFuture<Void> f_nextChunkFuture = nextChunkFuture;
             final LightingChunk f_nextChunk = nextChunk;
-            nextChunk.forcedChunk.move(WorldUtil.forceChunkLoaded(world, nextChunk.chunkX, nextChunk.chunkZ));
+            nextChunk.forcedChunk.move(FORCE_LOADED_FUNC.forceLoaded(world, nextChunk.chunkX, nextChunk.chunkZ));
 
             // Process this chunk, or if not yet loaded, process it in the future when it is
             CompletableFuture<Chunk> future = nextChunk.forcedChunk.getChunkAsync();
@@ -297,6 +299,23 @@ public class LightingTaskBatch implements LightingTask {
                     }
                 });
             }
+        }
+    }
+
+    @FunctionalInterface
+    private static interface ForceLoadedFunc {
+        ForcedChunk forceLoaded(World world, int cx, int cz);
+    }
+
+    private static final ForceLoadedFunc FORCE_LOADED_FUNC;
+    static {
+        if (SafeMethod.contains(ForcedChunk.class, "load", World.class, int.class, int.class, int.class)) {
+            // Use a radius of 0 so it only loads this one chunk
+            System.out.println("AAA!");
+            FORCE_LOADED_FUNC = (w, cx, cz) -> ForcedChunk.load(w, cx, cz, 0);
+        } else {
+            // Fallback for older bkcl: used default radius of 2
+            FORCE_LOADED_FUNC = WorldUtil::forceChunkLoaded;
         }
     }
 
