@@ -311,7 +311,6 @@ public class LightingTaskBatch implements LightingTask {
     static {
         if (SafeMethod.contains(ForcedChunk.class, "load", World.class, int.class, int.class, int.class)) {
             // Use a radius of 0 so it only loads this one chunk
-            System.out.println("AAA!");
             FORCE_LOADED_FUNC = (w, cx, cz) -> ForcedChunk.load(w, cx, cz, 0);
         } else {
             // Fallback for older bkcl: used default radius of 2
