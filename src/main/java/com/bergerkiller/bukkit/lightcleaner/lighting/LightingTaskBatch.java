@@ -82,8 +82,9 @@ public class LightingTaskBatch implements LightingTask {
     /**
      * Gets the X and Z-coordinates of all the chunk columns to process.
      * The coordinates are combined into a single Long, which can be decoded
-     * using {@link MathUtil#longHashMsw(long)} for X and {@link MathUtil#longHashLsw(long) for Z.
-     * 
+     * using {@link MathUtil#longHashMsw(long)} for X and
+     * {@link MathUtil#longHashLsw(long)} for Z.
+     *
      * @return chunk coordinates
      */
     public long[] getChunks() {

@@ -123,7 +123,7 @@ public class LightingService extends AsyncTask {
     /**
      * Adds a player who will be notified of the lighting operations being completed
      *
-     * @param player to add, null for console
+     * @param sender Player or console sender to add, null for console
      */
     public static void addRecipient(CommandSender sender) {
         if (sender instanceof BlockCommandSender) {
