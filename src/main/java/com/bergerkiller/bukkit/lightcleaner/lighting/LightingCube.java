@@ -14,7 +14,7 @@ import com.bergerkiller.bukkit.common.wrappers.BlockData;
 import com.bergerkiller.bukkit.common.wrappers.ChunkSection;
 import com.bergerkiller.bukkit.lightcleaner.LCTimings;
 import com.bergerkiller.bukkit.lightcleaner.util.BlockFaceSetSection;
-import com.bergerkiller.generated.net.minecraft.world.level.chunk.NibbleArrayHandle;
+import com.bergerkiller.generated.net.minecraft.world.level.chunk.DataLayerHandle;
 
 /**
  * A single 16x16x16 cube of stored block information
@@ -26,14 +26,14 @@ public class LightingCube {
     public final LightingChunk owner;
     public final LightingCubeNeighboring neighbors = new LightingCubeNeighboring();
     public final int cy;
-    public final NibbleArrayHandle skyLight;
-    public final NibbleArrayHandle blockLight;
-    public final NibbleArrayHandle emittedLight;
-    public final NibbleArrayHandle opacity;
+    public final DataLayerHandle skyLight;
+    public final DataLayerHandle blockLight;
+    public final DataLayerHandle emittedLight;
+    public final DataLayerHandle opacity;
     private final BlockFaceSetSection opaqueFaces;
 
     // Memory optimization for all-air cubes
-    private static final NibbleArrayHandle ALL_ZERO_NIBBLE_ARRAY = NibbleArrayHandle.createNew();
+    private static final DataLayerHandle ALL_ZERO_NIBBLE_ARRAY = DataLayerHandle.createNew();
     private static final BlockFaceSetSection ALL_TRANSPARENT_OPAQUE_FACES = new BlockFaceSetSection();
 
     // BKCL added this at some point
@@ -60,8 +60,8 @@ public class LightingCube {
         int worldZ = owner.chunkZ << 4;
 
         // Fill opacity and initial block lighting values
-        this.opacity = NibbleArrayHandle.createNew();
-        this.emittedLight = NibbleArrayHandle.createNew();
+        this.opacity = DataLayerHandle.createNew();
+        this.emittedLight = DataLayerHandle.createNew();
         this.opaqueFaces = new BlockFaceSetSection();
         int x, y, z, opacity, blockEmission;
         BlockFaceSet opaqueFaces;
@@ -352,8 +352,8 @@ public class LightingCube {
         public final LightingChunk owner;
         public final int cy;
         public final ChunkSection chunkSection;
-        public final NibbleArrayHandle currentSkyLight;
-        public final NibbleArrayHandle currentBlockLight;
+        public final DataLayerHandle currentSkyLight;
+        public final DataLayerHandle currentBlockLight;
 
         private Data(LightingChunk owner, int cy, ChunkSection chunkSection) {
             this.owner = owner;
@@ -362,11 +362,11 @@ public class LightingCube {
 
             if (owner.neighbors.hasAll()) {
                 // Block light data (is re-initialized in the fill operation below, no need to read)
-                this.currentBlockLight = NibbleArrayHandle.createNew();
+                this.currentBlockLight = DataLayerHandle.createNew();
 
                 // Sky light data (is re-initialized using heightmap operation later, no need to read)
                 if (owner.hasSkyLight) {
-                    this.currentSkyLight = NibbleArrayHandle.createNew();
+                    this.currentSkyLight = DataLayerHandle.createNew();
                 } else {
                     this.currentSkyLight = null;
                 }
@@ -377,9 +377,9 @@ public class LightingCube {
                 byte[] blockLightData = WorldUtil.getSectionBlockLight(owner.world,
                         owner.chunkX, cy, owner.chunkZ);
                 if (blockLightData != null) {
-                    this.currentBlockLight = NibbleArrayHandle.createNew(blockLightData);
+                    this.currentBlockLight = DataLayerHandle.createNew(blockLightData);
                 } else {
-                    this.currentBlockLight = NibbleArrayHandle.createNew();
+                    this.currentBlockLight = DataLayerHandle.createNew();
                 }
 
                 // Sky light data
@@ -387,9 +387,9 @@ public class LightingCube {
                     byte[] skyLightData = WorldUtil.getSectionSkyLight(owner.world,
                             owner.chunkX, cy, owner.chunkZ);
                     if (skyLightData != null) {
-                        this.currentSkyLight = NibbleArrayHandle.createNew(skyLightData);
+                        this.currentSkyLight = DataLayerHandle.createNew(skyLightData);
                     } else {
-                        this.currentSkyLight = NibbleArrayHandle.createNew();
+                        this.currentSkyLight = DataLayerHandle.createNew();
                     }
                 } else {
                     this.currentSkyLight = null;

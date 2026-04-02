@@ -10,7 +10,7 @@ import com.bergerkiller.bukkit.common.wrappers.IntHashMap;
 import com.bergerkiller.bukkit.lightcleaner.LCTimings;
 import com.bergerkiller.bukkit.lightcleaner.LightCleaner;
 import com.bergerkiller.bukkit.lightcleaner.util.DelayClosedForcedChunk;
-import com.bergerkiller.generated.net.minecraft.world.level.chunk.ChunkHandle;
+import com.bergerkiller.generated.net.minecraft.world.level.chunk.LevelChunkHandle;
 
 import org.bukkit.Chunk;
 import org.bukkit.World;
@@ -62,7 +62,7 @@ public class LightingChunk {
     /**
      * Gets all the sections inside this chunk.
      * Elements are never null.
-     * 
+     *
      * @return sections
      */
     public Collection<LightingCube> getSections() {
@@ -72,7 +72,7 @@ public class LightingChunk {
     /**
      * Efficiently iterates the vertical cubes of a chunk, only
      * querying the lookup table every 16 blocks
-     * 
+     *
      * @param previous The previous cube we iterated
      * @param y Block y-coordinate
      * @return the cube at the Block y-coordinate, or null if this cube does not exist
@@ -477,7 +477,7 @@ public class LightingChunk {
             try {
                 for (CompletableFuture<Boolean> future : futures) {
                     if (future.get().booleanValue()) {
-                        ChunkHandle.fromBukkit(chunk).markDirty();
+                        LevelChunkHandle.fromBukkit(chunk).markDirty();
                         return Boolean.TRUE;
                     }
                 }
